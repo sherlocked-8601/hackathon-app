@@ -1,0 +1,560 @@
+1
+00:00:00,800 --> 00:00:02,689
+Hi, we're the Creed A.I team.
+
+2
+00:00:02,689 --> 00:00:12,850
+Small business owners hear about A.I tools every day, but they don't have time to figure out which one actually fits a restaurant, a clinic or an HVAC shop.
+
+3
+00:00:13,500 --> 00:00:15,629
+Review sites tell you what people liked.
+
+4
+00:00:15,629 --> 00:00:24,250
+They don't tell you whether a tool does your specific job, what it will really cost you each month, or whether you're already paying for something that covers it.
+
+5
+00:00:24,900 --> 00:00:26,164
+So we built Creed A.I.
+
+6
+00:00:26,164 --> 00:00:34,377
+You tell it your business and the job you need done, and it shows tools that were actually checked for that job, with the price and the source.
+
+7
+00:00:34,377 --> 00:00:38,340
+And when you want to talk it through, there's Arkadio, our assistant.
+
+8
+00:00:38,990 --> 00:00:47,178
+We're Arvind, who built Arkadio and its security guardrails, including testing against the OWASP Top 10 for A.I applications.
+
+9
+00:00:47,178 --> 00:00:51,108
+Giri, who designed the interface and the sign-in experience.
+
+10
+00:00:51,108 --> 00:00:54,710
+And Aurin, who built the core app and its architecture.
+
+11
+00:00:55,360 --> 00:00:57,810
+Let's walk through it, as a restaurant owner.
+
+12
+00:00:58,460 --> 00:01:00,439
+Here are some common situations.
+
+13
+00:01:00,439 --> 00:01:06,437
+Each slide is a real kind of business with a real problem, like missed calls or staff scheduling.
+
+14
+00:01:06,437 --> 00:01:18,620
+Nineteen kinds of business are covered today, from coffee shops and bakeries to plumbers, salons and clinics, along with twelve everyday jobs, like missed calls, invoicing, reviews and bookkeeping.
+
+15
+00:01:19,270 --> 00:01:20,906
+Let's be a restaurant owner.
+
+16
+00:01:20,906 --> 00:01:22,308
+I type my business here.
+
+17
+00:01:22,308 --> 00:01:24,411
+Now I pick a task, staff scheduling.
+
+18
+00:01:24,411 --> 00:01:26,865
+Notice the business still says Restaurant.
+
+19
+00:01:26,865 --> 00:01:28,734
+That's one of the bugs we fixed.
+
+20
+00:01:28,734 --> 00:01:29,961
+I'll come back to it.
+
+21
+00:01:29,961 --> 00:01:32,941
+You don't need to know any software names to start.
+
+22
+00:01:32,941 --> 00:01:38,900
+Every field is optional, and if your problem isn't on the list, you can describe it in your own words.
+
+23
+00:01:39,550 --> 00:01:43,645
+The top tells me there's one recommended tool and three more options.
+
+24
+00:01:43,645 --> 00:01:50,470
+It also tells me exactly which business and which task these results are for, so I always know what I'm looking at.
+
+25
+00:01:51,120 --> 00:01:53,074
+Recommended means one thing only.
+
+26
+00:01:53,074 --> 00:01:57,100
+We checked this tool for this exact task, for this kind of business.
+
+27
+00:01:57,100 --> 00:02:04,678
+You see the monthly price, and if you open details, every fact links to the vendor page it came from and the date we checked it.
+
+28
+00:02:04,678 --> 00:02:09,770
+For a restaurant, that's Homebase, which has a free plan that covers staff scheduling.
+
+29
+00:02:10,420 --> 00:02:12,868
+Everything else goes under More options.
+
+30
+00:02:12,868 --> 00:02:14,092
+Each card is simple:
+
+31
+00:02:14,092 --> 00:02:19,967
+the name, a one-line summary, a link to the website, a button to compare and a heart to save it.
+
+32
+00:02:19,967 --> 00:02:24,251
+We don't stamp these as good fits, because we haven't proven that yet.
+
+33
+00:02:24,251 --> 00:02:27,249
+Here, that's 7shifts, Connecteam and When I Work:
+
+34
+00:02:27,249 --> 00:02:30,860
+real alternatives you can compare, but not recommendations.
+
+35
+00:02:31,510 --> 00:02:33,664
+I can put up to three side by side.
+
+36
+00:02:33,664 --> 00:02:40,311
+I choose the tasks I care about and the table shows which tool covers which task and the added monthly cost.
+
+37
+00:02:40,311 --> 00:02:45,112
+If I already pay for a tool, it tells me so instead of making me buy it twice.
+
+38
+00:02:45,112 --> 00:02:50,220
+And every number in that table comes from the same sourced facts, not from the A.I.
+
+39
+00:02:50,870 --> 00:02:54,800
+Here's a case where nothing has been checked yet for this task.
+
+40
+00:02:54,800 --> 00:03:00,851
+Instead of a zero recommended message or a page full of question marks, you get Tools to look at:
+
+41
+00:03:00,851 --> 00:03:03,970
+real tools in this area with a link to their site.
+
+42
+00:03:03,970 --> 00:03:05,530
+Honest, and still useful.
+
+43
+00:03:06,180 --> 00:03:07,760
+Now, meet Arkadio.
+
+44
+00:03:08,410 --> 00:03:09,292
+This is Arkadio.
+
+45
+00:03:09,292 --> 00:03:13,097
+You can talk to it the way you'd talk to a friend who knows software.
+
+46
+00:03:13,097 --> 00:03:16,846
+Arkadio reads our catalog live through a tool call, not from memory.
+
+47
+00:03:16,846 --> 00:03:21,202
+Its answer comes with the same cards you saw before, and the same rule applies.
+
+48
+00:03:21,202 --> 00:03:24,400
+It only calls something recommended when we've checked it.
+
+49
+00:03:24,400 --> 00:03:32,450
+You can start with a few quick questions about your business, or just type what's slowing you down, like, I keep missing calls while I'm on a job.
+
+50
+00:03:33,100 --> 00:03:35,241
+Here's the part we care most about.
+
+51
+00:03:35,241 --> 00:03:38,239
+Arkadio cannot just make up a price or a feature.
+
+52
+00:03:38,239 --> 00:03:49,129
+Before its answer reaches you, our server checks that it really called the catalog tool, that the result matches what we expected, and that every claim points to stored evidence.
+
+53
+00:03:49,129 --> 00:03:52,372
+If any of that fails, you don't get a made up answer.
+
+54
+00:03:52,372 --> 00:03:53,840
+You get a safe fallback.
+
+55
+00:03:53,840 --> 00:03:56,226
+It also has guardrails on what goes in.
+
+56
+00:03:56,226 --> 00:04:01,426
+If someone tries to talk it out of its rules, it politely refuses, like you see here.
+
+57
+00:04:01,426 --> 00:04:09,013
+And if someone pastes a card number, a Social Security number, or a password, it's stopped before it ever reaches the model.
+
+58
+00:04:09,013 --> 00:04:16,660
+Arvind tested Arkadio against every item in the OWASP Top 10 for A.I applications, with fifty-four automated security checks.
+
+59
+00:04:17,310 --> 00:04:23,034
+If you sign in, you can save plans and favourites, and your chat history comes back next time.
+
+60
+00:04:23,034 --> 00:04:25,044
+That's tied to your account only.
+
+61
+00:04:25,044 --> 00:04:26,506
+Nobody else can read it.
+
+62
+00:04:26,506 --> 00:04:33,570
+Passwords need eight to fourteen characters and at least one number, and a forgotten password can be reset by email.
+
+63
+00:04:34,220 --> 00:04:35,710
+So how does it all work?
+
+64
+00:04:36,360 --> 00:04:37,825
+Here's how it's built.
+
+65
+00:04:37,825 --> 00:04:43,749
+It runs on one Azure virtual machine in Belgium Central, as nine Docker Compose services.
+
+66
+00:04:43,749 --> 00:04:45,347
+Caddy is the front door.
+
+67
+00:04:45,347 --> 00:04:47,877
+It handles HTTPS and security headers.
+
+68
+00:04:47,877 --> 00:04:50,340
+The FastAPI app holds the core logic:
+
+69
+00:04:50,340 --> 00:04:53,468
+matching, comparison, plans and sign-in checks.
+
+70
+00:04:53,468 --> 00:04:55,466
+The matching is deterministic.
+
+71
+00:04:55,466 --> 00:04:58,395
+The model never decides what is recommended.
+
+72
+00:04:58,395 --> 00:05:01,457
+Hermes is the agent runtime that runs Arkadio.
+
+73
+00:05:01,457 --> 00:05:04,852
+The MCP executor is the only tool Arkadio can call.
+
+74
+00:05:04,852 --> 00:05:08,247
+It's read-only and it gives public catalog details.
+
+75
+00:05:08,247 --> 00:05:10,111
+Every call leaves a receipt.
+
+76
+00:05:10,111 --> 00:05:13,107
+The model gateway meters every model request.
+
+77
+00:05:13,107 --> 00:05:16,968
+It reserves the cost before the call and settles it after.
+
+78
+00:05:16,968 --> 00:05:19,564
+That's how we keep a hard spending cap.
+
+79
+00:05:19,564 --> 00:05:25,688
+The verification worker discovers new tools and checks vendor pages for prices and features.
+
+80
+00:05:25,688 --> 00:05:30,215
+The renderer is a sandboxed Chromium for pages that need JavaScript.
+
+81
+00:05:30,215 --> 00:05:35,874
+It can only reach the internet through a guarded proxy that blocks private addresses.
+
+82
+00:05:35,874 --> 00:05:42,930
+Redis keeps chat history per account, and SQLite holds the catalog, plans, receipts and the spend ledgers.
+
+83
+00:05:43,580 --> 00:05:45,186
+Sign-in uses Supabase.
+
+84
+00:05:45,186 --> 00:05:51,244
+We verify the actual token with Supabase on every request, we don't just decode it.
+
+85
+00:05:51,244 --> 00:05:54,820
+The model is Claude Haiku 4.5 through OpenRouter.
+
+86
+00:05:55,470 --> 00:05:58,119
+This is the flow for one Arkadio answer.
+
+87
+00:05:58,119 --> 00:06:01,696
+The app registers what it expects before Arkadio runs.
+
+88
+00:06:01,696 --> 00:06:06,729
+Arkadio calls the tool, the tool writes a receipt with a hash of the result.
+
+89
+00:06:06,729 --> 00:06:11,167
+When Arkadio finishes, the app checks that receipt and hash itself.
+
+90
+00:06:11,167 --> 00:06:13,750
+A model saying success is never enough.
+
+91
+00:06:14,400 --> 00:06:15,893
+And the budget is real.
+
+92
+00:06:15,893 --> 00:06:17,386
+We set lifetime limits:
+
+93
+00:06:17,386 --> 00:06:22,515
+four dollars for chat, one dollar for discovery, ten dollars total for testing.
+
+94
+00:06:22,515 --> 00:06:26,670
+The whole project so far has used about four and a half dollars.
+
+95
+00:06:27,320 --> 00:06:32,420
+We want to be honest about what broke, because finding these is what made the product trustworthy.
+
+96
+00:06:33,070 --> 00:06:33,305
+One.
+
+97
+00:06:33,305 --> 00:06:35,834
+Tools looked recommended when they weren't.
+
+98
+00:06:35,834 --> 00:06:45,889
+When we checked one tool for a task, like Homebase for restaurant scheduling, the page showed the tools next to it as Also a good fit, even though nobody had checked them.
+
+99
+00:06:45,889 --> 00:06:57,533
+We ran an audit of two hundred and forty business and task combinations, and found twenty-five where this happened, including medical staff scheduling, which is exactly where a wrong answer matters.
+
+100
+00:06:57,533 --> 00:06:59,297
+We fixed it at the data level.
+
+101
+00:06:59,297 --> 00:07:05,530
+Each tool now carries which tasks it was checked for, and the page only says Recommended when that's true.
+
+102
+00:07:06,180 --> 00:07:06,434
+Two.
+
+103
+00:07:06,434 --> 00:07:08,781
+The page was full of not sure labels.
+
+104
+00:07:08,781 --> 00:07:12,968
+Cards used to say things like Needs checking, or Source not found.
+
+105
+00:07:12,968 --> 00:07:16,204
+That's honest, but it's noise for a business owner.
+
+106
+00:07:16,204 --> 00:07:19,059
+Now if we don't know a fact, we leave it off.
+
+107
+00:07:19,059 --> 00:07:23,500
+The full record, with sources and dates, is still kept in the backend.
+
+108
+00:07:24,150 --> 00:07:24,519
+Three.
+
+109
+00:07:24,519 --> 00:07:26,673
+The carousel changed your business.
+
+110
+00:07:26,673 --> 00:07:35,410
+If you typed Restaurant and then clicked a shortcut on a coffee shop slide, your business quietly became Coffee shop, and the results changed.
+
+111
+00:07:35,410 --> 00:07:37,010
+Now what you type is kept.
+
+112
+00:07:37,660 --> 00:07:37,988
+Four.
+
+113
+00:07:37,988 --> 00:07:41,531
+Arkadio could describe features a tool never returned.
+
+114
+00:07:41,531 --> 00:07:47,042
+In early tests, the model wrote nice sounding descriptions that weren't in our data.
+
+115
+00:07:47,042 --> 00:07:52,226
+That's why we added the receipt and evidence check you saw in the architecture.
+
+116
+00:07:52,226 --> 00:07:55,900
+Arkadio can only say what the catalog actually returned.
+
+117
+00:07:56,550 --> 00:07:56,874
+Five.
+
+118
+00:07:56,874 --> 00:07:58,947
+Prices that were really guesses.
+
+119
+00:07:58,947 --> 00:08:04,195
+Some vendor pages show annual or per-seat prices, or hide them behind JavaScript.
+
+120
+00:08:04,195 --> 00:08:11,580
+We now only accept a monthly price when the plan, the price and the currency all come from the same official page.
+
+121
+00:08:11,580 --> 00:08:14,560
+If it's unclear, we don't show a price at all.
+
+122
+00:08:15,210 --> 00:08:18,091
+And if we had sixteen weeks, here's the plan.
+
+123
+00:08:18,091 --> 00:08:19,244
+Weeks one to four:
+
+124
+00:08:19,244 --> 00:08:19,628
+depth.
+
+125
+00:08:19,628 --> 00:08:27,056
+Grow the checked catalog from a few dozen tools to a few hundred, with automatic re-checks so prices never go stale.
+
+126
+00:08:27,056 --> 00:08:28,337
+Weeks five to eight:
+
+127
+00:08:28,337 --> 00:08:29,105
+real owners.
+
+128
+00:08:29,105 --> 00:08:34,804
+Pilots with local shops, adding what they ask for, like sourced reviews and setup guides.
+
+129
+00:08:34,804 --> 00:08:36,149
+Weeks nine to twelve:
+
+130
+00:08:36,149 --> 00:08:37,301
+Arkadio does more.
+
+131
+00:08:37,301 --> 00:08:43,128
+Connecting the tools an owner already uses, more languages, and an outside security review.
+
+132
+00:08:43,128 --> 00:08:45,049
+And weeks thirteen to sixteen:
+
+133
+00:08:45,049 --> 00:08:45,498
+launch.
+
+134
+00:08:45,498 --> 00:08:51,581
+Ready for many users at once, a sustainable cost per conversation, and one number that matters:
+
+135
+00:08:51,581 --> 00:08:54,270
+how much time and money we saved an owner.
+
+136
+00:08:54,920 --> 00:08:56,098
+So that's Creed A.I.
+
+137
+00:08:56,098 --> 00:08:58,630
+You tell it your business and your problem.
+
+138
+00:08:58,630 --> 00:09:08,172
+It shows you tools that were actually checked for that job, the real monthly cost and the source, and Arkadio helps you think it through without making things up.
+
+139
+00:09:08,172 --> 00:09:12,942
+Next, we're adding sourced customer reviews and making long chats more resilient.
+
+140
+00:09:12,942 --> 00:09:14,120
+Thanks for watching.
+

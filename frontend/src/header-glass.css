@@ -1,0 +1,64 @@
+/* Glass header: a calm, translucent bar instead of the street scene and railway trim.
+   Loaded after theme.css and a11y.css and only overrides the header; remove the import in main.jsx to go back. */
+
+.site-shell .street-header {
+  background: #0d0c13a6;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid #ffffff12;
+  box-shadow: none;
+}
+.site-shell .street-header::before,
+.site-shell .street-header::after,
+.site-shell .street-header-scene { display: none; }
+.site-shell .street-header .mainstreet-brand { background: none; }
+
+/* Page links: plain text, highlighted on hover and keyboard focus. */
+.site-shell .street-header .sidebar-label { display: none; }
+.site-shell .street-header .stage,
+.site-shell .street-header .stage:first-child {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  box-shadow: none;
+  transition: background .2s ease, border-color .2s ease;
+}
+.site-shell .street-header .stage::before { display: none; }
+.site-shell .street-header .stage-copy strong { color: #cfc8dc; font-size: 13px; }
+.site-shell .street-header .street-nav-arrow { color: #9d94ad; }
+.site-shell .street-header .stage:hover,
+.site-shell .street-header .stage:focus-visible { background: #ffffff0f; border-color: #ffffff1f; transform: none; }
+.site-shell .street-header .stage:hover strong { color: #fff; }
+
+/* Buttons: one filled lavender action (Compare tools), the rest outlined. */
+.site-shell .street-header .nav-quick-compare {
+  background: transparent;
+  border: 1px solid #d8c8ff55;
+  border-radius: 999px;
+  color: #d8c8ff;
+  box-shadow: none;
+  font-weight: 600;
+}
+.site-shell .street-header .nav-quick-compare:hover { background: #d8c8ff1a; }
+.site-shell .street-header .nav-quick-compare:not(.favourites-nav) { background: #d8c8ff; border-color: #d8c8ff; color: #211731; }
+.site-shell .street-header .nav-quick-compare:not(.favourites-nav):hover { background: #e6dcff; }
+.site-shell .street-header .owner-account-trigger { background: transparent; border-color: #ffffff2e; border-radius: 999px; box-shadow: none; }
+
+/* On the opening view, the photo runs up under the glass instead of starting below a dark band.
+   Not in Compare mode (no photo there) or on the sign-in page. */
+.site-shell:not(.quick-compare-mode):not(.signin-page) > .street-header { margin-bottom: calc(-1 * var(--header-height)); }
+.site-shell:not(.quick-compare-mode) .main-panel > .topbar {
+  position: absolute; top: var(--header-height); left: 0; right: 0; z-index: 5; background: transparent;
+}
+.site-shell .main-panel > .topbar * { text-shadow: 0 1px 10px #000c; }
+
+/* On phones the header wraps onto two rows, so the photo starts below it instead of under it. */
+@media (max-width: 700px) {
+  .site-shell:not(.quick-compare-mode):not(.signin-page) > .street-header { margin-bottom: 0; }
+  .site-shell:not(.quick-compare-mode) .main-panel > .topbar { position: static; }
+}
+
+/* Browsers without blur get a solid enough bar to keep the text readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-shell .street-header { background: #0d0c13eb; }
+}

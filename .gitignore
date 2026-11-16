@@ -27,3 +27,10 @@ deploy/.chat-hotfix.lock
 /TEAMMATES handoff.md
 infra/*.parameters.local.json
 infra/azure-vm.json
+
+# Local-only demo and work files (videos are in Google Drive; GitHub rejects files over 100 MB)
+demo/*.mp4
+demo/.video-build/
+backend/data/*.extractions.jsonl
+architecture.pdf
+hackathon-app/
