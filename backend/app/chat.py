@@ -1259,7 +1259,11 @@ def _task_card(catalog, profile, memory, ids, texts):
 def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     from . import conversation_plan as planner
     from .tasks import rejected_task_ids
-    already_asked_task = memory.pending_question == 'task' and bool(memory.pending_task_ids)
+    previous_user = next((item.text for item in reversed(body.history) if item.role == 'user'), '')
+    issue_words = lambda value: {word for word in re.findall(r'[a-z]{5,}', value.casefold())
+                                 if word not in {'about', 'business', 'could', 'customers', 'help', 'please', 'would'}}
+    same_issue = bool(issue_words(previous_user) & issue_words(body.message))
+    already_asked_task = memory.pending_question == 'task' and bool(memory.pending_task_ids) and same_issue
     previous_choices = list(memory.pending_task_ids)
     if step.context_mode == 'owner':
         memory.business_goal = planner.goal_from_text(step.owner_text) or memory.business_goal

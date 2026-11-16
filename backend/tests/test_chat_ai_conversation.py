@@ -259,6 +259,22 @@ def test_second_task_clarification_stops_the_picker_loop(client, hermes, public_
     assert chat.card() == ['review_requests', 'website_chat_leads']
 
 
+def test_new_issue_after_a_task_card_can_ask_a_new_question(client, hermes, public_reads):
+    first = 'No business midweek'
+    second = 'Employees arrive late and shifts get confused'
+    Script(hermes,
+           [step('clarify', first, 'Which part would you like to improve?', 'acquisition',
+                 ['review_requests', 'website_chat_leads'])],
+           [step('clarify', second, 'Is scheduling or attendance the bigger problem?', 'workflow',
+                 ['staff_scheduling', 'job_scheduling'])])
+    chat = Chat(client, {'business_description': 'coffee shop'})
+    chat.say(first)
+    events, text = chat.say(second)
+    assert 'Is scheduling or attendance' in text
+    assert any(event['type'] == 'clarify' for event in events)
+    assert chat.card() == ['staff_scheduling', 'job_scheduling']
+
+
 def test_caption_request_states_scope_without_an_unrelated_tool_card(client, hermes, public_reads):
     message = 'Could you write an Instagram caption and a weekly posting routine?'
     Script(hermes, [step('unsupported', message, problem_ids=['email_marketing'])])
