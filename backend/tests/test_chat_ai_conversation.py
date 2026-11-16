@@ -184,6 +184,65 @@ def test_reply_is_dropped_for_kinds_that_render_verified_data(client):
     assert plan.steps[0].reply is None
 
 
+def test_excluded_bookkeeping_plan_is_corrected_to_explicit_lesson_booking():
+    from pathlib import Path
+    from app import db
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    message = 'I need help with lesson booking and reminders, not bookkeeping'
+    raw = {'steps': [step('recommend', message, problem_ids=['bookkeeping'])]}
+    plan = planner.validate_plan(raw, SimpleNamespace(message=message), catalog)
+    assert plan.steps[0].kind == 'recommend'
+    assert plan.steps[0].problem_ids == ['appointment_booking']
+
+
+def test_excluded_email_plan_cannot_recommend_email_marketing():
+    from pathlib import Path
+    from app import db
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    message = 'I need to attract new shoppers, not email to past customers'
+    raw = {'steps': [step('clarify', message, problem_ids=['email_marketing'])]}
+    plan = planner.validate_plan(raw, SimpleNamespace(message=message), catalog)
+    assert plan.steps[0].kind == 'unsupported'
+    assert plan.steps[0].problem_ids == []
+
+
+def test_excluded_task_is_removed_but_supported_choices_are_kept():
+    from pathlib import Path
+    from app import db
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    message = 'I need to attract new shoppers, not email to past customers'
+    raw = {'steps': [step('clarify', message, problem_ids=['email_marketing', 'review_requests'])]}
+    plan = planner.validate_plan(raw, SimpleNamespace(message=message), catalog)
+    assert plan.steps[0].kind == 'clarify'
+    assert plan.steps[0].problem_ids == ['review_requests']
+
+
+def test_caption_request_has_a_clear_marketplace_boundary():
+    text = planner.creation_scope('Could you write an Instagram caption and a weekly posting routine?')
+    assert 'does not write captions' in text
+    assert 'unrelated tool' in text
+    assert planner.creation_scope('Compare scheduling tools') is None
+
+
+def test_wrong_model_task_does_not_show_bookkeeping_for_lesson_booking(client, hermes, public_reads):
+    message = 'I need help with lesson booking and reminders, not bookkeeping'
+    Script(hermes, [step('recommend', message, problem_ids=['bookkeeping'])])
+    events, _ = Chat(client, {}).say(message)
+    recommended = [event['problem_id'] for event in events if event['type'] == 'recommendation']
+    assert 'bookkeeping' not in recommended
+    assert 'appointment_booking' in recommended
+
+
+def test_wrong_model_task_does_not_offer_email_to_new_shoppers_without_a_list(client, hermes, public_reads):
+    message = "I need new customers, but don't have an email list"
+    Script(hermes, [step('clarify', message, problem_ids=['email_marketing'])])
+    events, text = Chat(client, {}).say(message)
+    assert 'email_marketing' not in [event.get('problem_id') for event in events]
+    assert 'email_marketing' not in [event['memory'].get('pending_task_ids', []) for event in events
+                                     if event['type'] == 'memory']
+    assert text
+
+
 def test_safe_reply_rules(client):
     catalog = client.app.state.catalog
     good = 'Which part of the egg business takes the most time?'

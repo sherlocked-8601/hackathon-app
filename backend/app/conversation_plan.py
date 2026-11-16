@@ -296,6 +296,9 @@ def bound_write_ids(step, body, catalog, memory):
 
 def validate_plan(raw, body, catalog):
     plan = Plan.model_validate(raw)
+    from .tasks import rejected_task_ids, resolve_task
+    rejected = rejected_task_ids(catalog, body.message)
+    positive = resolve_task(catalog, body.message)
     known = {tool.id for tool in catalog.tools if tool.status != 'rejected'}
     problems = {card.id for card in catalog.problem_cards}
     for step in plan.steps:
@@ -303,6 +306,17 @@ def validate_plan(raw, body, catalog):
             raise ValueError('unbound_conversation_action')
         if not set(step.tool_ids + step.exclude_tool_ids) <= known or not set(step.problem_ids) <= problems:
             raise ValueError('unbound_conversation_action')
+        if rejected.intersection(step.problem_ids):
+            # A model category contradicted an explicit current-turn exclusion.
+            # A single independently matched task can be used; otherwise state
+            # the catalog limit instead of presenting the rejected category.
+            allowed = [pid for pid in step.problem_ids if pid not in rejected]
+            if positive.status == 'matched' and positive.problem_id not in rejected:
+                step.kind, step.problem_ids, step.reply = 'recommend', [positive.problem_id], None
+            elif allowed:
+                step.kind, step.problem_ids, step.reply = 'clarify', allowed, None
+            else:
+                step.kind, step.problem_ids, step.reply = 'unsupported', [], None
         if step.kind == 'forget' and not re.search(r"\b(?:forget|erase|clear|stop remembering|do not remember|don't remember)\b", step.owner_text, re.I):
             raise ValueError('unbound_conversation_action')
         if step.kind == 'forget' and (contextual_language(step.owner_text) or re.search(r"\b(?:do not forget|don't forget|never forget|not asking.*forget)\b", step.owner_text, re.I)):
@@ -357,6 +371,14 @@ def safe_reply(text, catalog, recent=()):
 
 def recent_questions(body, limit=2):
     return [item.text for item in reversed(body.history) if item.role == 'assistant'][:limit]
+
+
+def creation_scope(text):
+    """Make the marketplace boundary explicit for content-writing requests."""
+    if re.search(r'\b(?:caption|post ideas|social media posts|instagram posts|facebook posts)\b', text, re.I):
+        return ('I can help you compare software for that task, but this chat does not write captions '
+                'or create a posting calendar. I will not suggest an unrelated tool as if it did.')
+    return None
 
 
 def help_text(topic, catalog):

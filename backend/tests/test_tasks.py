@@ -1,7 +1,9 @@
 import pytest
+from pathlib import Path
 
+from app import db
 from app.schemas import Trade
-from app.tasks import resolve_task, stated_trade
+from app.tasks import rejected_task_ids, resolve_task, stated_trade
 
 
 @pytest.fixture
@@ -119,6 +121,30 @@ def test_real_catalog_does_not_guess_on_mixed_sentences(client):
 def test_real_catalog_matches_a_need_next_to_a_turned_down_one(client):
     match = client.post("/api/tasks/resolve", json={"text": "I do not need help answering calls. I need help with bookkeeping."}).json()
     assert match["status"] == "matched" and match["problem_id"] == "bookkeeping"
+
+
+@pytest.mark.parametrize('text', [
+    'I need help with lesson booking and reminders, not bookkeeping',
+    'I need help booking lessons, not bookkeeping',
+    'I need class booking and scheduling, not bookkeeping',
+])
+def test_booking_is_not_bookkeeping_and_explicit_rejection_is_respected(text):
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    match = resolve_task(catalog, text)
+    assert match.status == 'matched' and match.problem_id == 'appointment_booking'
+    assert rejected_task_ids(catalog, text) == {'bookkeeping'}
+
+
+def test_explicit_email_rejection_is_not_an_acquisition_rejection():
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    message = 'I need to attract new shoppers, not email to past customers'
+    assert rejected_task_ids(catalog, message) == {'email_marketing'}
+
+
+def test_no_email_list_does_not_become_existing_customer_marketing():
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    assert rejected_task_ids(catalog, "I need new customers, but don't have an email list") == {'email_marketing'}
+    assert rejected_task_ids(catalog, "I have no email list. How do I build an email list?") == set()
 
 
 @pytest.mark.parametrize("text, trade", [

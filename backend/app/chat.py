@@ -1258,6 +1258,7 @@ def _task_card(catalog, profile, memory, ids, texts):
 
 def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     from . import conversation_plan as planner
+    from .tasks import rejected_task_ids
     if step.context_mode == 'owner':
         memory.business_goal = planner.goal_from_text(step.owner_text) or memory.business_goal
     recent = planner.recent_questions(body)
@@ -1266,10 +1267,15 @@ def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     # Falling back to a template question here would be the same loop reworded.
     looping = bool(step.reply) and any(planner.repeats(step.reply, old) for old in recent)
     choices = list(step.problem_ids)
+    rejected = rejected_task_ids(catalog, body.message)
+    choices = [pid for pid in choices if pid not in rejected]
     memory.pending_question, memory.pending_task_ids = None, []
     if step.kind == 'unsupported':
+        scope = planner.creation_scope(step.owner_text)
+        if scope:
+            return scope, None
         ids, matched = relevant_task_ids(catalog, texts, _owner_trade(catalog, profile, memory), 3)
-        choices = choices or (ids if matched else [])
+        choices = choices or ([pid for pid in ids if pid not in rejected] if matched else [])
         text = reply or UNSUPPORTED_REPLY + (' These are the closest tasks I can help with.' if choices else
                                              ' Tell me another task that takes up your time and I will look.')
         return text, _task_card(catalog, profile, memory, choices, texts) if choices else None

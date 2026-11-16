@@ -3,7 +3,7 @@ import re
 from .schemas import Catalog, ProblemCard, TaskMatch
 
 _SUFFIXES = (("ies", "y"), ("s", ""), ("ing", ""), ("ed", ""), ("e", ""))
-_CLAUSE_BREAK = re.compile(r"[.;!?\n]+|,?\s+\b(?:but|however|although|though|whereas|instead|except|yet)\b", re.IGNORECASE)
+_CLAUSE_BREAK = re.compile(r"[.;!?\n]+|,\s*(?=(?:not|no|never|without)\b)|,?\s+\b(?:but|however|although|though|whereas|instead|except|yet)\b", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:not|no|never|without|dont|doesnt|didnt|isnt|arent|wont|cant)\b|n['’]t\b", re.IGNORECASE)
 # These say the owner falls behind on a task, so they state the need instead of rejecting it.
 _FALLING_BEHIND = re.compile(
@@ -47,7 +47,8 @@ def _negated(clause: str) -> bool:
 _REJECTION = re.compile(
     r"\b(?:do\s+not|don['’]?t|no\s+longer)\s+(?:really\s+)?need\b(?!\s+to\b)"
     r"|\b(?:do\s+not|don['’]?t)\s+want\s+(?:any\s+)?(?:help|a\s+tool|software)\b"
-    r"|\bnot\s+(?:interested\s+in|looking\s+for)\b|\bno\s+need\s+for\b", re.IGNORECASE)
+    r"|\bnot\s+(?:interested\s+in|looking\s+for)\b|\bno\s+need\s+for\b"
+    r"|^\s*(?:not|no)\s+(?!enough\b|time\b|able\b|having\b)", re.IGNORECASE)
 
 
 def _example_key(text: str) -> str:
@@ -86,6 +87,9 @@ def _stem(word: str) -> str:
     """Crude on purpose: it only has to make 'booking' meet 'book' and 'replies' meet 'reply'."""
     if word == 'getting':
         return 'get'
+    # "booking" is an appointment verb; "books" is an accounting noun.
+    if word == 'books':
+        return 'books'
     for suffix, swap in _SUFFIXES:
         if word.endswith(suffix) and len(word) - len(suffix) >= 3:
             word = word[: -len(suffix)] + swap
@@ -192,3 +196,18 @@ def resolve_task(catalog: Catalog, text: str) -> TaskMatch:
     if len(choices) == 1:
         return TaskMatch(status="ambiguous", choices=choices, message=f"Did you mean: {choices[0].title}? Please confirm.")
     return TaskMatch(status="ambiguous", choices=choices, message="That could mean a few things. Which one is closest?")
+
+
+def rejected_task_ids(catalog: Catalog, text: str) -> set[str]:
+    """Task categories explicitly turned down in the current request."""
+    rejected = set()
+    for clause in _CLAUSE_BREAK.split(_owner_text(text)):
+        if clause and _negated(clause) and _REJECTION.search(clause):
+            rejected.update(card.id for card in _clause_hits(catalog, clause))
+    # Email to an existing list does not address attracting new local shoppers
+    # when the owner explicitly has no list. Asking to create one is different.
+    if (re.search(r"\b(?:no|don't have|do not have|without)\b.{0,25}\bemail list\b", text, re.I)
+            and re.search(r'\b(?:new|nearby|local)\b.{0,35}\b(?:customers?|shoppers?|people)\b', text, re.I)
+            and not re.search(r'\b(?:build|start|create|grow)\b.{0,25}\bemail list\b', text, re.I)):
+        rejected.add('email_marketing')
+    return rejected
