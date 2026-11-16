@@ -1259,6 +1259,8 @@ def _task_card(catalog, profile, memory, ids, texts):
 def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     from . import conversation_plan as planner
     from .tasks import rejected_task_ids
+    already_asked_task = memory.pending_question == 'task' and bool(memory.pending_task_ids)
+    previous_choices = list(memory.pending_task_ids)
     if step.context_mode == 'owner':
         memory.business_goal = planner.goal_from_text(step.owner_text) or memory.business_goal
     recent = planner.recent_questions(body)
@@ -1279,6 +1281,13 @@ def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
         text = reply or UNSUPPORTED_REPLY + (' These are the closest tasks I can help with.' if choices else
                                              ' Tell me another task that takes up your time and I will look.')
         return text, _task_card(catalog, profile, memory, choices, texts) if choices else None
+    if already_asked_task:
+        # The owner has already seen task choices. A second model clarification
+        # without a selected task must not restart the same picker indefinitely.
+        memory.pending_question = 'task'
+        memory.pending_task_ids = [pid for pid in previous_choices if pid not in rejected]
+        return ("I heard your goal, but I still don't have a verified match for that exact need. "
+                "The task choices I showed are the ones I can check; if none fits, I won't guess at a tool."), None
     text = reply
     if text is None and step.topic == 'acquisition':
         business = memory.scenario_business if step.context_mode == 'scenario' else memory.business_description

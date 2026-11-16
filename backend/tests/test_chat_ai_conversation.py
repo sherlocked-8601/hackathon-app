@@ -243,6 +243,31 @@ def test_wrong_model_task_does_not_offer_email_to_new_shoppers_without_a_list(cl
     assert text
 
 
+def test_second_task_clarification_stops_the_picker_loop(client, hermes, public_reads):
+    first = 'No business midweek'
+    second = "I don't get customers midweek"
+    Script(hermes,
+           [step('clarify', first, 'Which part would you like to improve?', 'acquisition',
+                 ['review_requests', 'website_chat_leads'])],
+           [step('clarify', second, 'Which part should I focus on?', 'acquisition',
+                 ['review_requests', 'website_chat_leads'])])
+    chat = Chat(client, {'business_description': 'coffee shop'})
+    chat.say(first)
+    events, text = chat.say(second)
+    assert "don't have a verified match" in text
+    assert not [event for event in events if event['type'] == 'clarify']
+    assert chat.card() == ['review_requests', 'website_chat_leads']
+
+
+def test_caption_request_states_scope_without_an_unrelated_tool_card(client, hermes, public_reads):
+    message = 'Could you write an Instagram caption and a weekly posting routine?'
+    Script(hermes, [step('unsupported', message, problem_ids=['email_marketing'])])
+    events, text = Chat(client, {'business_description': 'candle shop'}).say(message)
+    assert 'does not write captions' in text
+    assert not [event for event in events if event['type'] == 'recommendation']
+    assert not [event for event in events if event['type'] == 'clarify']
+
+
 def test_safe_reply_rules(client):
     catalog = client.app.state.catalog
     good = 'Which part of the egg business takes the most time?'
