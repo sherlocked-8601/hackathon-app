@@ -197,6 +197,30 @@ class Tool(BaseModel):
                    and fact.source_type=='vendor' and fact.source_url and fact.source_url.scheme=='https'
                    and registrable_domain(urlsplit(str(fact.source_url)).hostname or '')==owner for fact in facts)
 
+    def feature_only_check(self, capability: str, today: date | None = None) -> list[str] | None:
+        """A partial review can still prove the feature itself. Returns what it left unconfirmed, or None when it proves nothing.
+
+        Only a fresh, conflict-free review of this exact task, sourced from the vendor's own https domain, counts.
+        """
+        review=self.reviews.get(capability)
+        if self.status=='rejected' or not review or review.eligible or review.capability!=capability:
+            return None
+        checks=review.checks
+        if not (checks.get('official_page_fetched') and checks.get('feature_supported')) or checks.get('fresh') is False:
+            return None
+        if any(value=='true' for value in review.evidence.get('conflicts',{}).values()):
+            return None
+        if not 0<=((today or date.today())-review.checked).days<=7:
+            return None
+        from .domains import registrable_domain
+        from urllib.parse import urlsplit
+        owner=registrable_domain(urlsplit(str(self.url)).hostname or '')
+        urls=[str(url) for url in review.sources]+[review.evidence.get('feature',{}).get('url') or '']
+        if not review.sources or not all(urlsplit(url).scheme=='https' and registrable_domain(urlsplit(url).hostname or '')==owner for url in urls):
+            return None
+        missing=[('price','monthly_price_supported'),('plan','plan_inclusion_supported'),('business_fit','business_fit_supported')]
+        return [label for label,key in missing if not checks.get(key)]
+
     def fit(self, trade: str | None) -> Fit | None:
         """None means the vendor aims this tool at other kinds of business, so it is set aside."""
         if self.applicability == "cross_industry":
@@ -437,6 +461,8 @@ class Option(BaseModel):
     facts: list[ToolFact]
     within_budget: bool | None = None
     price_estimated: bool = False
+    feature_verified: bool = False
+    unconfirmed: list[Literal["price", "plan", "business_fit"]] = Field(default_factory=list)
 
 
 class SetAside(BaseModel):

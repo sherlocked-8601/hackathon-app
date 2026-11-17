@@ -68,6 +68,7 @@
 .tool-site-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent, #d8c8ff); font-size: 15px; font-weight: 600; }
 .tool-site-text { display: flex; flex: 1 1 100%; flex-direction: column; gap: 4px; min-width: 0; }
 .tool-site-summary { color: #cfc6dc; font-size: 14px; line-height: 1.45; }
+.tool-site-note { color: #f4f1fa; font-size: 14px; font-weight: 600; line-height: 1.45; }
 .tool-site-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 
 @media (max-width: 640px) {

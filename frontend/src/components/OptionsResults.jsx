@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import './options.css'
 import { FavouriteButton } from '../favourites/Favourites'
 import ToolWebsiteLink from './ToolWebsiteLink'
-import { BADGE, hasPrice, knownFacts, optionChecked, safeWebsite } from '../toolEvidence'
+import { BADGE, featureCheckNote, hasPrice, knownFacts, optionChecked, safeWebsite } from '../toolEvidence'
 
 // Everything shown here comes from the backend recommendation. This file only groups it and
 // words it plainly; it never ranks tools, decides fit, or works out a price.
@@ -146,14 +146,15 @@ export default function OptionsResults({ recommendation, toolsById, activeProble
       owned,
       best,
       others: rest.filter(({ option, recommended }) => recommended && option !== best?.option),
-      more: rest.filter(({ recommended }) => !recommended),
+      qualified: rest.filter(({ option, recommended }) => !recommended && featureCheckNote(option)),
+      more: rest.filter(({ option, recommended }) => !recommended && !featureCheckNote(option)),
     }
   }, [recommendation])
 
   const recommendedCount = (groups.best ? 1 : 0) + groups.others.length
-  const browsing = recommendedCount === 0 && groups.owned.length === 0
+  const browsing = recommendedCount === 0 && groups.owned.length === 0 && groups.qualified.length === 0
   const businessName = business ? (business === business.toUpperCase() ? business : business.toLowerCase()) : 'business like yours'
-  const questions = questionsFor([...groups.owned, ...groups.more].map(({ option }) => option).filter((option) => option.fit === 'unconfirmed' || option.added_monthly_usd === null || option.route === 'check_plan'), activeProblem?.title || 'this task', businessName)
+  const questions = questionsFor([...groups.owned, ...groups.qualified, ...groups.more].map(({ option }) => option).filter((option) => option.fit === 'unconfirmed' || option.added_monthly_usd === null || option.route === 'check_plan'), activeProblem?.title || 'this task', businessName)
   const questionText = questions.map((group) => [group.name, ...group.list.map((item) => `- ${item}`)].join('\n')).join('\n\n')
 
   const headline = browsing ? 'Tools to look at' : {
@@ -173,6 +174,7 @@ export default function OptionsResults({ recommendation, toolsById, activeProble
       <div className="opt-summary-bar" aria-label="Summary">
         {recommendedCount > 0 && <span className="opt-pill"><strong>{recommendedCount}</strong> recommended</span>}
         {groups.owned.length > 0 && <span className="opt-pill"><strong>{groups.owned.length}</strong> you already pay for</span>}
+        {groups.qualified.length > 0 && <span className="opt-pill"><strong>{groups.qualified.length}</strong> feature checked</span>}
         {groups.more.length > 0 && <span className="opt-pill"><strong>{groups.more.length}</strong> {browsing ? 'to look at' : 'more options'}</span>}
       </div>
 
@@ -185,6 +187,18 @@ export default function OptionsResults({ recommendation, toolsById, activeProble
       {groups.best && <section aria-labelledby="opt-best"><h4 className="opt-group" id="opt-best">Recommended</h4><div className="opt-grid">{card(groups.best, true)}</div></section>}
       {groups.others.length > 0 && <section aria-labelledby="opt-others"><h4 className="opt-group" id="opt-others">{groups.best ? 'Also recommended' : 'Recommended'}</h4><div className="opt-grid">{groups.others.map((item) => card(item))}</div></section>}
       {groups.owned.length > 0 && <section aria-labelledby="opt-owned"><h4 className="opt-group" id="opt-owned">You already pay for</h4><div className="opt-grid">{groups.owned.map((item) => card(item))}</div></section>}
+      {groups.qualified.length > 0 && (
+        <section aria-labelledby="opt-qualified">
+          <h4 className="opt-group" id="opt-qualified">Feature checked, details to confirm</h4>
+          <ul className="tool-site-list">
+            {groups.qualified.map(({ option }) => (
+              <ToolWebsiteLink key={option.tool_id} toolId={option.tool_id} name={option.tool_name}
+                url={option.service_url || toolsById[option.tool_id]?.url} summary={toolsById[option.tool_id]?.summary}
+                note={featureCheckNote(option)} compare={<CompareToggle {...compareProps(option.tool_id)} />} />
+            ))}
+          </ul>
+        </section>
+      )}
       {groups.more.length > 0 && (
         <section aria-labelledby="opt-more">
           <h4 className="opt-group" id="opt-more">{browsing ? 'Tools to look at' : 'More options'}</h4>

@@ -2,13 +2,14 @@ import React from 'react'
 import { safeWebsite } from '../toolEvidence'
 import { FavouriteButton } from '../favourites/Favourites'
 
-export default function ToolWebsiteLink({ toolId, name, url, summary, compare }) {
+export default function ToolWebsiteLink({ toolId, name, url, summary, note, compare }) {
   const site = safeWebsite(url)
   return (
     <li className="tool-site">
       <div className="tool-site-text">
         <span className="tool-site-name">{name}</span>
         {summary && <span className="tool-site-summary">{summary}</span>}
+        {note && <span className="tool-site-note">{note}</span>}
       </div>
       <div className="tool-site-actions">
         {compare}

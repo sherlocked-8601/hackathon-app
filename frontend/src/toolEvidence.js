@@ -38,3 +38,12 @@ export function checkedTasks(tool) {
 export function taskChecked(tool, capability) {
   return checkedTasks(tool).includes(capability)
 }
+
+export function featureCheckNote(option) {
+  if (!option?.feature_verified || optionChecked(option)) return ''
+  const open = Array.isArray(option.unconfirmed) ? option.unconfirmed : []
+  const parts = [open.includes('price') ? 'Feature verified; price requires vendor confirmation.' : 'Feature verified.']
+  if (open.includes('plan')) parts.push('Confirm which plan includes this feature.')
+  if (open.includes('business_fit')) parts.push('This check did not confirm it suits your business.')
+  return parts.join(' ')
+}

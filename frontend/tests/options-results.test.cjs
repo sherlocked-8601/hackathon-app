@@ -77,3 +77,22 @@ test('nothing checked shows plain website cards with no count of zero', () => {
   assert.doesNotMatch(sites, /javascript:|Monthly cost|Recommended/)
   assert.doesNotMatch(html, UNSURE)
 })
+
+test('a feature-checked tool with an unknown price gets its own labelled group, never recommended', () => {
+  const slang = option('slang', 'Slang', { feature_verified: true, unconfirmed: ['price', 'plan'] })
+  const html = render({ outcome: 'verify_with_vendor', winner_tool_id: null, options: [], check_first: [slang, connecteam] })
+  const qualified = section(html, 'opt-qualified')
+  assert.match(qualified, /Feature checked, details to confirm/)
+  assert.match(qualified, /Slang/)
+  assert.match(qualified, /Feature verified; price requires vendor confirmation\. Confirm which plan includes this feature\./)
+  assert.doesNotMatch(qualified, /Connecteam|Recommended|Fits your budget/)
+  assert.match(section(html, 'opt-more'), /Connecteam/)
+  assert.doesNotMatch(html, /recommended<\/span>|Fits your budget/)
+})
+
+test('a fully checked tool never shows the feature-only label', () => {
+  const both = { ...homebase, feature_verified: true, unconfirmed: ['price'] }
+  const html = render({ outcome: 'new_tool', winner_tool_id: 'homebase', options: [both], check_first: [] })
+  assert.equal(section(html, 'opt-qualified'), '')
+  assert.doesNotMatch(html, /Feature verified/)
+})

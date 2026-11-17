@@ -214,12 +214,15 @@ def problems(request: Request, trade: str | None = None, category: str | None = 
 
 class DirectoryTool(Tool):
     checked_capabilities: list[str] = []
+    feature_checked: dict[str, list[str]] = {}
 
 
 def _directory(tool: Tool) -> DirectoryTool:
     """Browse surfaces show the same per-task verdict as recommendations instead of trusting a product-wide flag."""
     checked = [c.capability for c in tool.capabilities if checked_for(tool, c.capability)]
-    return DirectoryTool(**tool.model_dump(), checked_capabilities=checked)
+    partial = {c.capability: open_items for c in tool.capabilities
+               if c.capability not in checked and (open_items := tool.feature_only_check(c.capability)) is not None}
+    return DirectoryTool(**tool.model_dump(), checked_capabilities=checked, feature_checked=partial)
 
 
 @app.get("/api/tools")

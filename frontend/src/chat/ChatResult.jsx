@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { recommendationIntro } from '../toolEvidence'
+import { featureCheckNote, recommendationIntro } from '../toolEvidence'
 import { vendorQuestions, vendorQuestionsText } from './vendorQuestions'
 import { FavouriteButton } from '../favourites/Favourites'
 
@@ -75,6 +75,7 @@ function OptionCard({ option, status, ruledOut, taskPurpose, fallbackUrl }) {
         <FavouriteButton toolId={option.tool_id} name={option.tool_name} />
       </div>
       <p className="msc-route">{ROUTE_LABELS[option.route] || 'An option to consider'}</p>
+      {featureCheckNote(option) && <p className="msc-note msc-feature-check">{featureCheckNote(option)}</p>}
       {ruledOut && <p className="msc-ruled-out">You told Arkadio you don't want this one</p>}
       {cost && <p className="msc-cost">{cost}</p>}
       {cost && option.cost_note && <p className="msc-note">{option.cost_note}</p>}

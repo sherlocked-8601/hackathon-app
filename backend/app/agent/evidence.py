@@ -182,6 +182,19 @@ def build_evidence(catalog: Catalog, profile: BusinessProfile, problem_ids: list
             uncertain = option in rec.check_first or option.status != "verified"
             text = f"{tool.name}: "
             text += "Possible option only; its suitability or details need checking." if uncertain else ROUTES[option.route]
+            review = tool.reviews.get(problem.capability)
+            if uncertain and option.feature_verified and review:
+                feature_url = _safe(review.evidence.get("feature", {}).get("url") or str(review.sources[0]))
+                if feature_url:
+                    key = f"{tool.id}:{problem.capability}:feature_check"
+                    if not any(s.id == key for s in sources):
+                        sources.append(Source(id=key, kind="vendor", url=feature_url))
+                    ids.append(key)
+                text += " Feature verified; price requires vendor confirmation." if "price" in option.unconfirmed else " Feature verified."
+                if "plan" in option.unconfirmed:
+                    text += " Confirm which plan includes this feature."
+                if "business_fit" in option.unconfirmed:
+                    text += " This check did not confirm it suits your business."
             if option.fit == "any_business":
                 text += " Listed as general-purpose, offered across industries."
             elif option.fit == "unconfirmed":

@@ -24,3 +24,14 @@ test('official fallback links are clickable without interpreting message text as
   assert.match(dom.window.document.body.textContent, /<img src=x onerror=alert\(1\)>/)
   dom.window.close()
 })
+
+test('chat cards show the feature-only label for check-first tools and nothing for plain ones', () => {
+  const base = { route: 'separate_tool', fit: 'unconfirmed', status: 'pending_review', added_monthly_usd: null, facts: [], service_url: 'https://slang.example.com' }
+  const recommendation = { outcome: 'verify_with_vendor', winner_tool_id: null, message: 'Tools to look at.', options: [], set_aside: [],
+    check_first: [{ ...base, tool_id: 'slang', tool_name: 'Slang', feature_verified: true, unconfirmed: ['price', 'business_fit'] },
+                  { ...base, tool_id: 'plain', tool_name: 'Plain', service_url: 'https://plain.example.com' }] }
+  const html = renderToStaticMarkup(React.createElement(compiled.exports.default, { recommendation, statuses: {}, onPrint() {} }))
+  assert.match(html, /Feature verified; price requires vendor confirmation\. This check did not confirm it suits your business\./)
+  assert.equal((html.match(/Feature verified/g) || []).length, 1)
+  assert.doesNotMatch(html, /Recommended/)
+})

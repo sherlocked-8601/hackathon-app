@@ -176,11 +176,13 @@ def checked_for(tool: Tool, capability: str) -> bool:
 def _option(tool: Tool, capability: str, owned: list[Tool], fit: Fit, fit_note: str, plan: str | None = None) -> Option:
     route = _route(tool, capability, owned, plan)
     cost, note, is_estimate = _monthly_cost(tool, capability, route, plan)
+    verified = checked_for(tool, capability)
+    unconfirmed = None if verified else tool.feature_only_check(capability)
     return Option(
         tool_id=tool.id,
         tool_name=tool.name,
         service_url=tool.url,
-        status="verified" if checked_for(tool, capability) else "pending_review",
+        status="verified" if verified else "pending_review",
         route=route,
         fit=fit,
         fit_note=fit_note,
@@ -188,6 +190,8 @@ def _option(tool: Tool, capability: str, owned: list[Tool], fit: Fit, fit_note: 
         cost_note=note,
         facts=tool_facts(tool),
         price_estimated=is_estimate,
+        feature_verified=unconfirmed is not None,
+        unconfirmed=unconfirmed or [],
     )
 
 
@@ -203,7 +207,7 @@ def _facet_gap(catalog: Catalog, tool: Tool, problem: ProblemCard) -> str | None
 
 
 def _budget(option: Option, budget: float | None) -> Option:
-    if budget is not None and option.added_monthly_usd is not None and not option.price_estimated:
+    if budget is not None and option.added_monthly_usd is not None and not option.price_estimated and "price" not in option.unconfirmed:
         option.within_budget = option.added_monthly_usd <= budget
     return option
 
@@ -215,6 +219,7 @@ def _rank(options: list[Option]) -> list[Option]:
         key=lambda o: (
             o.route not in OWNED_ROUTES,
             o.route not in OWNED_ROUTES and o.status != "verified",
+            not o.feature_verified,
             ROUTE_ORDER[o.route],
             o.fit != "made_for",
             o.added_monthly_usd is None,
