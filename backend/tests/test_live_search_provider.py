@@ -46,6 +46,34 @@ def test_failed_search_is_diagnosable_without_logging_private_provider_body(tmp_
     assert json.loads(SafeFormatter().format(record))['provider_status'] == 500
 
 
+@pytest.mark.parametrize('requests, cap, expected', [
+    ('600', '5', (600, 5.0)),
+    ('5000', '50', (2000, 10.0)),
+    ('0', '-1', (1, 0.0)),
+])
+def test_recheck_budget_limits_are_clamped(tmp_path, monkeypatch, requests, cap, expected):
+    monkeypatch.setenv('DISCOVERY_MAX_REQUESTS', requests)
+    monkeypatch.setenv('DISCOVERY_SPEND_CAP_USD', cap)
+    search = OpenRouterSearch(tmp_path/'spend.db', [])
+    assert (search.max_requests, search.cap_usd) == expected
+
+
+def test_raising_cap_unblocks_an_exhausted_ledger(tmp_path, monkeypatch):
+    monkeypatch.setenv('DISCOVERY_OPENROUTER_KEY', 'synthetic-key')
+    monkeypatch.setenv('DISCOVERY_MAX_REQUESTS', '2')
+    search = OpenRouterSearch(tmp_path/'spend.db', [])
+    for _ in range(2):
+        number, _reason = search.ledger.admit(0.25, search.max_requests, search.cap_usd)
+        search.ledger.settle(number, 0.01)
+    assert not search.available()
+    assert search.ledger.admit(0.25, search.max_requests, search.cap_usd)[0] is None
+    monkeypatch.setenv('DISCOVERY_MAX_REQUESTS', '600')
+    monkeypatch.setenv('DISCOVERY_SPEND_CAP_USD', '5')
+    raised = OpenRouterSearch(tmp_path/'spend.db', [])
+    assert raised.available()
+    assert raised.ledger.admit(0.25, raised.max_requests, raised.cap_usd)[0] is not None
+
+
 def test_unknown_engine_cannot_silently_switch_provider(tmp_path, monkeypatch):
     monkeypatch.setenv('DISCOVERY_WEB_ENGINE', 'random')
     with pytest.raises(ValueError, match='invalid_discovery_web_engine'):

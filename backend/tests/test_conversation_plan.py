@@ -183,11 +183,15 @@ def test_business_subject_split_preserves_noun_phrase():
     assert business_description('I run a kite repair studio and handle urgent orders') == 'kite repair studio'
 
 
-def test_strict_plan_schema_requires_all_fields():
-    schema = planner.strict_schema()
+def test_strict_plan_schema_only_requires_fields_without_defaults():
+    schema = planner.strict_schema(reply=True)
     item = schema['properties']['steps']['items']
-    assert set(item['required']) == set(item['properties'])
+    assert item['required'] == ['kind', 'owner_text']
+    assert item['additionalProperties'] is False and 'reply' in item['properties']
+    assert schema['required'] == ['steps']
     assert '$defs' not in schema and '$ref' not in json.dumps(schema)
+    short = planner.Plan.model_validate({'steps': [{'kind': 'social', 'owner_text': 'bye', 'reply': 'Take care.'}]})
+    assert short.steps[0].tool_ids == [] and short.steps[0].context_mode == 'owner' and short.steps[0].topic is None
 
 
 def test_hypothetical_assumption_is_separate_and_followup_can_return_to_owner(client, public_reads, hermes):
@@ -253,8 +257,10 @@ def test_v3_gateway_has_plan_without_legacy_single_reply_escape_hatch():
     properties = body['response_format']['json_schema']['schema']['properties']
     assert 'plan' in properties
     assert properties['plan']['type'] == 'object'
-    assert properties['action'] == properties['reply_id'] == properties['conversation_intent'] == {'type': 'null'}
-    assert properties['routes'] == properties['trade'] == properties['trade_text'] == {'type': 'null'}
+    legacy = {'action', 'reply_id', 'conversation_intent', 'routes', 'trade', 'trade_text'}
+    assert not legacy & set(properties)
+    assert not legacy & set(body['response_format']['json_schema']['schema']['required'])
+    assert set(body['response_format']['json_schema']['schema']['required']) <= set(properties)
     old = _pinned({'messages': [{'role': 'system', 'content': 'penny_hermes_selection_v1\nconversation_state_v2'}]})
     assert 'plan' not in old['response_format']['json_schema']['schema']['properties']
 

@@ -5,12 +5,15 @@ const MAX_HISTORY = 12
 // limit would get every message rejected; trimming here also heals a chat that is already stuck.
 const MEMORY_LIMITS = { owned: 20, ruled_out: 20, active_task_ids: 5, pending_task_ids: 3, last_tool_ids: 6, comparison_excluded_ids: 20, pending_favourite_ids: 6 }
 const MAX_PLANS = 20
+const MAX_FACTS = 20
+const EMPTY_REQUIREMENTS = { facts: [], next_id: 1, turn: 0 }
 
 export function memoryForRequest(memory = {}) {
   const trimmed = { ...memory }
   for (const [name, limit] of Object.entries(MEMORY_LIMITS)) {
     if (Array.isArray(trimmed[name])) trimmed[name] = trimmed[name].slice(0, limit)
   }
+  if (trimmed.requirements && Array.isArray(trimmed.requirements.facts)) trimmed.requirements = { ...trimmed.requirements, facts: trimmed.requirements.facts.slice(0, MAX_FACTS) }
   if (trimmed.plans && typeof trimmed.plans === 'object') trimmed.plans = Object.fromEntries(Object.entries(trimmed.plans).slice(0, MAX_PLANS))
   return trimmed
 }
@@ -41,6 +44,7 @@ export function loadSession(emptyMemory, storage = store()) {
         owned: Array.isArray(saved.memory?.owned) ? saved.memory.owned : [],
         ruled_out: Array.isArray(saved.memory?.ruled_out) ? saved.memory.ruled_out : [],
         plans: saved.memory?.plans && typeof saved.memory.plans === 'object' ? saved.memory.plans : {},
+        requirements: Array.isArray(saved.memory?.requirements?.facts) ? saved.memory.requirements : EMPTY_REQUIREMENTS,
       },
     }
   } catch {

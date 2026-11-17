@@ -27,6 +27,9 @@ APPROVED_REPLIES = {
 }
 
 
+FAREWELL = 'Goodbye! Come back any time.'
+
+
 def reply_choices():
     return {f'{intent}.{i}': text for intent, choices in APPROVED_REPLIES.items() for i, text in enumerate(choices)}
 

@@ -143,7 +143,7 @@ def test_memory_records_the_choices_shown_not_the_models_list(client, monkeypatc
 
 def test_memory_sent_to_the_browser_always_fits_its_limits():
     from app.chat import ChatMemory, _memory_event
-    over = ChatMemory.model_construct(**{**ChatMemory().model_dump(), 'pending_task_ids': list('abcdef'), 'active_task_ids': list('abcdefgh')})
+    over = ChatMemory().model_copy(update={'pending_task_ids': list('abcdef'), 'active_task_ids': list('abcdefgh')})
     memory = _memory_event(over)['memory']
     assert len(memory['pending_task_ids']) == 3 and len(memory['active_task_ids']) == 5
     ChatMemory.model_validate(memory)

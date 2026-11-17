@@ -301,8 +301,18 @@ def _pinned(body: dict[str, Any], output_limit: int = MAX_OUTPUT_TOKENS) -> dict
             body['response_format']['json_schema']['schema']['required'].append('plan')
             # V3 conversation must use the complete plan, not the legacy
             # single-action/generic reply escape hatch. Old instances keep V2.
+            # The fields are left out rather than typed null: the app reads them with .get(), and
+            # writing six nulls on every turn was paid output time.
+            schema = body['response_format']['json_schema']['schema']
             for field in ('action', 'conversation_intent', 'reply_id', 'routes', 'trade', 'trade_text'):
-                properties[field] = {'type': 'null'}
+                properties.pop(field)
+                schema['required'].remove(field)
+            from .request_semantics import SEMANTICS_MARKER, Interpretation, inline_schema
+            if SEMANTICS_MARKER in system_text:
+                # Only an app that asked for the semantic contract gets the field, so a rollback
+                # to an older app never receives output it cannot validate.
+                properties['semantics'] = {'type': 'null'} if registered_reads else inline_schema(Interpretation)
+                body['response_format']['json_schema']['schema']['required'].append('semantics')
         if not any(message.get('role') == 'system' and 'conversation_state_v2' in str(message.get('content', ''))
                    for message in body.get('messages', []) if isinstance(message, dict)):
             # Existing app instances keep their old contract during rolling
@@ -310,7 +320,8 @@ def _pinned(body: dict[str, Any], output_limit: int = MAX_OUTPUT_TOKENS) -> dict
             schema = body['response_format']['json_schema']['schema']
             for field in ('business_text', 'action'):
                 properties.pop(field, None)
-                schema['required'].remove(field)
+                if field in schema['required']:
+                    schema['required'].remove(field)
         properties['claim_ids']['maxItems'] = 10
         properties['claim_ids']['items']['maxLength'] = 160
         task_text_schema['maxLength'] = 500

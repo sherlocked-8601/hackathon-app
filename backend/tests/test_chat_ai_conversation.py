@@ -224,6 +224,12 @@ def test_caption_request_has_a_clear_marketplace_boundary():
     assert planner.creation_scope('Compare scheduling tools') is None
 
 
+def test_caption_tool_discovery_is_not_refused_as_drafting():
+    assert planner.creation_scope('Which free tools help me plan Instagram posts and write captions?') is None
+    assert planner.creation_scope('Is there software that writes social media posts?') is None
+    assert 'does not write captions' in planner.creation_scope('Write three captions for my bakery')
+
+
 def test_wrong_model_task_does_not_show_bookkeeping_for_lesson_booking(client, hermes, public_reads):
     message = 'I need help with lesson booking and reminders, not bookkeeping'
     Script(hermes, [step('recommend', message, problem_ids=['bookkeeping'])])
@@ -233,13 +239,90 @@ def test_wrong_model_task_does_not_show_bookkeeping_for_lesson_booking(client, h
     assert 'appointment_booking' in recommended
 
 
-def test_wrong_model_task_does_not_offer_email_to_new_shoppers_without_a_list(client, hermes, public_reads):
-    message = "I need new customers, but don't have an email list"
-    Script(hermes, [step('clarify', message, problem_ids=['email_marketing'])])
-    events, text = Chat(client, {}).say(message)
-    assert 'email_marketing' not in [event.get('problem_id') for event in events]
-    assert 'email_marketing' not in [event['memory'].get('pending_task_ids', []) for event in events
-                                     if event['type'] == 'memory']
+def shown_task_ids(client, events):
+    titles = {card.title: card.id for card in client.app.state.catalog.problem_cards}
+    return [titles[choice] for event in events if event['type'] == 'clarify'
+            for choice in event['choices'] if choice in titles]
+
+
+def test_no_email_list_is_a_missing_prerequisite_not_an_exclusion(client):
+    catalog = client.app.state.catalog
+    from app.tasks import rejected_task_ids
+    assert 'email_marketing' not in rejected_task_ids(catalog, "I need new customers, but don't have an email list")
+    assert 'email_marketing' in rejected_task_ids(catalog, 'I need new customers, not email marketing')
+
+
+def test_task_card_backfill_never_reintroduces_an_excluded_task(client, monkeypatch):
+    from types import SimpleNamespace as NS
+    from app import chat
+    monkeypatch.setattr(chat, 'relevant_task_ids', lambda *_: (['email_marketing', 'review_requests'], True))
+    shown = {}
+    monkeypatch.setattr(chat, 'run_action', lambda _c, _a, args, _p, _m, *_: shown.update(args) or NS(
+        data={'shown_task_ids': args['problem_ids']}))
+    memory = NS(pending_question=None, pending_task_ids=[], trade=None, business_description=None)
+    catalog = client.app.state.catalog
+    card = chat._task_card(catalog, NS(trade=None), memory, ['website_chat_leads'], ['new customers'],
+                           {'email_marketing'})
+    assert card is not None
+    assert shown['problem_ids'] == ['website_chat_leads', 'review_requests']
+    assert memory.pending_task_ids == ['website_chat_leads', 'review_requests']
+    shown.clear()
+    assert chat._task_card(catalog, NS(trade=None), memory, [], ['x'], {'email_marketing', 'review_requests'}) is None
+    assert not shown
+
+
+def _ask(client, problem_ids, excluded, trade='retail'):
+    from app import chat
+    from app.schemas import BusinessProfile
+    memory = chat.ChatMemory(trade=trade)
+    return chat.run_action(client.app.state.catalog, 'ask_owner', {'question_id': 'task', 'problem_ids': problem_ids},
+                           BusinessProfile(), memory, excluded)
+
+
+def test_ask_owner_drops_a_turned_down_task_from_the_model_list(client):
+    result = _ask(client, ['email_marketing', 'review_requests', 'missed_calls'], {'email_marketing'})
+    assert result.data['shown_task_ids'] == ['review_requests', 'missed_calls']
+
+
+def test_ask_owner_trade_fallback_skips_turned_down_tasks(client):
+    from app.penny_grounding import suggested_task_ids
+    default = suggested_task_ids(client.app.state.catalog, 'retail', 3)
+    turned_down = default[0]
+    result = _ask(client, [turned_down], {turned_down})
+    assert turned_down not in result.data['shown_task_ids']
+    assert result.data['shown_task_ids'][:2] == default[1:]
+    assert len(result.data['shown_task_ids']) == 3
+
+
+def test_ask_owner_shows_no_picker_when_fewer_than_two_tasks_remain(client):
+    result = _ask(client, ['email_marketing', 'review_requests'], {'email_marketing'}, trade=None)
+    assert 'error' in result.data
+    assert not result.events
+
+
+def test_ask_owner_without_exclusions_is_unchanged(client):
+    assert _ask(client, ['email_marketing', 'review_requests'], frozenset()).data['shown_task_ids'] == [
+        'email_marketing', 'review_requests']
+
+
+def test_every_ask_owner_call_site_passes_the_turned_down_tasks():
+    import inspect
+    from app import chat
+    source = inspect.getsource(chat)
+    calls = [line for line in source.splitlines() if 'run_action(' in line and 'def ' not in line
+             and ("'ask_owner'" in line or 'call["name"]' in line)]
+    assert len(calls) == 5
+    assert all(line.split('run_action(', 1)[1].count(',') >= 5 for line in calls), calls
+
+
+def test_excluded_task_is_not_backfilled_into_the_rendered_card(client, hermes, public_reads):
+    message = 'I need new customers, not email marketing'
+    Script(hermes, [step('clarify', message, 'Which of these fits best?', None,
+                         ['email_marketing', 'review_requests'])])
+    chat = Chat(client, {'business_description': 'gift shop'})
+    events, text = chat.say(message)
+    assert 'email_marketing' not in shown_task_ids(client, events)
+    assert 'email_marketing' not in chat.card()
     assert text
 
 

@@ -10,10 +10,10 @@ import pytest
 
 from app import chat_guard
 from app.agent.grounding import FALLBACK
-from app.penny_conversation import APPROVED_REPLIES
+from app.penny_conversation import APPROVED_REPLIES, FAREWELL
 from test_chat import calls, client, reply, script, send  # noqa: F401  (client is a fixture)
 
-SERVER_TEXT = {text for replies in APPROVED_REPLIES.values() for text in replies} | {FALLBACK}
+SERVER_TEXT = {text for replies in APPROVED_REPLIES.values() for text in replies} | {FALLBACK, FAREWELL}
 
 
 def validate(client, message, **extra):

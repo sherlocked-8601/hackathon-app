@@ -18,6 +18,11 @@ from .schemas import Catalog
 
 logger = logging.getLogger(__name__)
 
+# The discovery ledger is lifetime, and daily rechecks of every verified tool draw from it,
+# so these ceilings must leave room for weeks of refreshes, not one discovery session.
+MAX_REQUESTS_CEILING = 2000
+SPEND_CAP_CEILING_USD = 10.0
+
 
 class OpenRouterSearch:
     """Search leads are untrusted; only independently fetched vendor evidence is stored."""
@@ -35,8 +40,8 @@ class OpenRouterSearch:
         if self.engine not in ('exa', 'native'):
             raise ValueError('invalid_discovery_web_engine')
         self.source_id = 'openrouter-' + self.engine + '-live'
-        self.max_requests = min(256, max(1, int(os.environ.get('DISCOVERY_MAX_REQUESTS', '4'))))
-        self.cap_usd = min(2.0, max(0.0, float(os.environ.get('DISCOVERY_SPEND_CAP_USD', '1'))))
+        self.max_requests = min(MAX_REQUESTS_CEILING, max(1, int(os.environ.get('DISCOVERY_MAX_REQUESTS', '4'))))
+        self.cap_usd = min(SPEND_CAP_CEILING_USD, max(0.0, float(os.environ.get('DISCOVERY_SPEND_CAP_USD', '1'))))
 
     def search(self, query, context):
         import httpx

@@ -51,7 +51,11 @@ class FakeHermes:
             if self.start_status != 200:
                 return httpx.Response(self.start_status, json={'error': 'down'})
             self.instructions = body['instructions']
-            self.package = EvidencePackage.model_validate_json(self.instructions.split('initial_evidence_package: ', 1)[1])
+            if 'initial_evidence_package: ' in self.instructions:
+                self.package = EvidencePackage.model_validate_json(self.instructions.split('initial_evidence_package: ', 1)[1])
+            else:
+                from app.agent.evidence import _finish
+                self.package = _finish('ok', [], [], [], [], {}, [])
             self.operations = OPERATION.findall(self.instructions)
             return httpx.Response(200, json={'run_id': 'run_abc', 'status': 'started'})
         if request.url.path.endswith('/stop'):

@@ -629,7 +629,8 @@ function Panel({ profile, auth, open, onClose, onActivityChange, drag, phone, ha
     setMemory((current) => {
       if (field === 'business' || field === 'trade') return { ...current, trade: null, business_description: null, business_forgotten: true,
         business_goal: null, scenario_business: null, last_tool_ids: [], active_task_ids: [], pending_task_ids: [], pending_question: null,
-        comparison_criterion: null, comparison_excluded_ids: [], background_done: false }
+        comparison_criterion: null, comparison_excluded_ids: [], background_done: false,
+        requirements: { facts: [], next_id: 1, turn: 0 } }
       if (id && field === 'owned') {
         const plans = { ...(current.plans || {}) }
         delete plans[id]

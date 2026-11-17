@@ -87,8 +87,15 @@ async def lifespan(app: FastAPI):
         from . import live_discovery
         if live_discovery.enabled():
             app.state.discovery_finder = live_discovery.make_finder(catalog, db_path.with_name('discovery.db'))
+        from .agent import hermes_runtime, warmup
+        hermes = hermes_runtime.hermes_config()
+        if warmup.auto_enabled() and hermes is not None:
+            app.state.warmup_task = asyncio.create_task(warmup.watch(hermes, min_gap_s=warmup.min_gap_s()))
         yield
     finally:
+        task = getattr(app.state, 'warmup_task', None)
+        if task is not None:
+            task.cancel()
         finder = getattr(app.state, 'discovery_finder', None)
         if callable(getattr(finder, 'close', None)):
             finder.close()

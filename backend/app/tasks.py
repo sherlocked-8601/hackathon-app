@@ -198,16 +198,16 @@ def resolve_task(catalog: Catalog, text: str) -> TaskMatch:
     return TaskMatch(status="ambiguous", choices=choices, message="That could mean a few things. Which one is closest?")
 
 
+# ", just scheduling" or ", I mean scheduling" after a refusal names the wanted task, not a second refusal.
+_WANTED_PIVOT = re.compile(r",\s*(?=(?:just|only|i\s+mean|rather)\b)", re.IGNORECASE)
+
+
 def rejected_task_ids(catalog: Catalog, text: str) -> set[str]:
     """Task categories explicitly turned down in the current request."""
     rejected = set()
     for clause in _CLAUSE_BREAK.split(_owner_text(text)):
-        if clause and _negated(clause) and _REJECTION.search(clause):
-            rejected.update(card.id for card in _clause_hits(catalog, clause))
-    # Email to an existing list does not address attracting new local shoppers
-    # when the owner explicitly has no list. Asking to create one is different.
-    if (re.search(r"\b(?:no|don't have|do not have|without)\b.{0,25}\bemail list\b", text, re.I)
-            and re.search(r'\b(?:new|nearby|local)\b.{0,35}\b(?:customers?|shoppers?|people)\b', text, re.I)
-            and not re.search(r'\b(?:build|start|create|grow)\b.{0,25}\bemail list\b', text, re.I)):
-        rejected.add('email_marketing')
+        for part in _WANTED_PIVOT.split(clause or ''):
+            if part and _negated(part) and _REJECTION.search(part):
+                rejected.update(card.id for card in _clause_hits(catalog, part))
+    # "No email list yet" is a missing prerequisite, not a rejection of email marketing.
     return rejected

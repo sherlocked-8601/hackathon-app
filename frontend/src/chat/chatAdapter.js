@@ -1,7 +1,7 @@
 import { api } from '../api.js'
 
 const UNAVAILABLE = 'Arkadio is unavailable right now. You can still browse and compare tools on this page.'
-export const EMPTY_MEMORY = { trade: null, business_description: null, business_forgotten: false, business_goal: null, scenario_business: null, comparison_excluded_ids: [], comparison_presentation: 'prose', pending_favourite_action: null, last_tool_ids: [], comparison_criterion: null, owned: [], ruled_out: [], plans: {}, budget_monthly_usd: null, background_done: false, active_task_ids: [], pending_question: null, pending_task_ids: [] }
+export const EMPTY_MEMORY = { trade: null, business_description: null, business_forgotten: false, business_goal: null, scenario_business: null, comparison_excluded_ids: [], comparison_presentation: 'prose', pending_favourite_action: null, last_tool_ids: [], comparison_criterion: null, owned: [], ruled_out: [], plans: {}, budget_monthly_usd: null, background_done: false, active_task_ids: [], pending_question: null, pending_task_ids: [], requirements: { facts: [], next_id: 1, turn: 0 } }
 let catalog = null
 
 export async function loadCatalog() {

@@ -141,9 +141,22 @@ def test_explicit_email_rejection_is_not_an_acquisition_rejection():
     assert rejected_task_ids(catalog, message) == {'email_marketing'}
 
 
-def test_no_email_list_does_not_become_existing_customer_marketing():
+@pytest.mark.parametrize('message', ['Not that one, I mean scheduling', "I don't need help with reviews, just scheduling",
+                                     "Not bookkeeping, only scheduling"])
+def test_the_wanted_task_after_a_refusal_is_not_turned_down(message):
     catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
-    assert rejected_task_ids(catalog, "I need new customers, but don't have an email list") == {'email_marketing'}
+    assert not rejected_task_ids(catalog, message) & {'staff_scheduling', 'job_scheduling', 'appointment_booking'}
+
+
+def test_a_refused_list_stays_refused():
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    assert {'bookkeeping', 'invoicing'} <= rejected_task_ids(catalog, "I don't need help with invoicing, bookkeeping or payroll")
+
+
+def test_no_email_list_is_a_prerequisite_gap_not_a_rejection():
+    catalog = db.load_catalog_file(Path(__file__).resolve().parent.parent / 'data' / 'catalog.json')
+    assert rejected_task_ids(catalog, "I need new customers, but don't have an email list") == set()
+    assert rejected_task_ids(catalog, "I need new customers, not email marketing") == {'email_marketing'}
     assert rejected_task_ids(catalog, "I have no email list. How do I build an email list?") == set()
 
 

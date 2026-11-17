@@ -15,7 +15,7 @@ class Step(BaseModel):
                   'help', 'compare', 'clarify', 'scope', 'social', 'recommend', 'unsupported']
     owner_text: str = Field(min_length=1, max_length=500)
     topic: Literal['overview', 'businesses', 'favourites', 'history', 'comparison', 'account',
-                   'acquisition', 'workflow', 'greeting', 'thanks', 'wellbeing'] | None = None
+                   'acquisition', 'workflow', 'greeting', 'thanks', 'wellbeing', 'goodbye'] | None = None
     criterion: Literal['price', 'plan', 'cost', 'fit'] | None = None
     presentation: Literal['table', 'list', 'prose'] | None = None
     tool_ids: list[str] = Field(default_factory=list, max_length=6)
@@ -36,7 +36,9 @@ REPLY_KINDS = ('clarify', 'scope', 'social', 'unsupported')
 
 
 def strict_schema(reply=False):
-    """OpenRouter strict schemas require every property, including nullable/default fields."""
+    """Strict schema for the plan. A step only requires kind and owner_text: every other field has a
+    pydantic default, and making the model write out each null and empty list cost about a second
+    of output on every turn."""
     schema = Plan.model_json_schema()
     if not reply:
         step = schema['$defs']['Step']
@@ -57,6 +59,7 @@ def strict_schema(reply=False):
     strict(schema)
     # Embed without external definitions, so the gateway can add it to its schema.
     step = schema.pop('$defs')['Step']
+    step['required'] = ['kind', 'owner_text']
     schema['properties']['steps']['items'] = step
     return schema
 
@@ -81,6 +84,17 @@ def mentioned_tools(catalog, text):
         for name in (tool.id.replace('_', ' '), tool.name))]
 
 
+def tapped_task(catalog, message):
+    """The whole message is an app-owned task example or a tapped card title, not a substring hit."""
+    normalize = lambda value: ' '.join(value.casefold().split()).strip(' .!?')
+    return any(normalize(message) in (normalize(card.plain_words), normalize(card.title)) for card in catalog.problem_cards)
+
+
+def confirms_pending_favourite(message, memory):
+    return bool(memory.pending_favourite_action and memory.pending_favourite_ids
+                and message.casefold().strip(' .!?') in ('yes', 'yes please', 'confirm', 'please do'))
+
+
 def fast_task_covered(catalog, body):
     """Every independent clause must be a known task or explicit owner context.
 
@@ -90,9 +104,8 @@ def fast_task_covered(catalog, body):
     from .conversation_state import business_description
     from .ownership import stated_ownership
     from .tasks import resolve_task
-    normalize = lambda value: ' '.join(value.casefold().split()).strip(' .!?')
-    if any(normalize(body.message) in (normalize(card.plain_words), normalize(card.title)) for card in catalog.problem_cards):
-        return True  # Exact app-owned task examples or a tapped card title, not arbitrary substring hits.
+    if tapped_task(catalog, body.message):
+        return True
     if contextual_language(body.message):
         return False
     parts = [part.strip() for part in re.split(r'[.!?;,\n]+|\band\b', body.message, flags=re.I) if part.strip()]
@@ -374,8 +387,14 @@ def recent_questions(body, limit=2):
 
 
 def creation_scope(text):
-    """Make the marketplace boundary explicit for content-writing requests."""
-    if re.search(r'\b(?:caption|post ideas|social media posts|instagram posts|facebook posts)\b', text, re.I):
+    """Make the marketplace boundary explicit for content-writing requests.
+
+    Asking which software helps with captions is tool discovery, which is in scope,
+    so it must not get the drafting refusal.
+    """
+    if re.search(r'\b(?:tools?|software|apps?|platforms?|programs?|services?)\b', text, re.I):
+        return None
+    if re.search(r'\b(?:captions?|post ideas|social media posts|instagram posts|facebook posts)\b', text, re.I):
         return ('I can help you compare software for that task, but this chat does not write captions '
                 'or create a posting calendar. I will not suggest an unrelated tool as if it did.')
     return None
@@ -411,6 +430,8 @@ def help_text(topic, catalog):
 def forget_business(memory):
     memory.trade = memory.business_description = memory.business_goal = memory.scenario_business = None
     memory.business_forgotten = True
+    from .request_semantics import RequestState
+    memory.requirements = RequestState()
     memory.last_tool_ids = []
     memory.active_task_ids = []
     memory.pending_task_ids = []
