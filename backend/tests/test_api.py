@@ -8,6 +8,8 @@ from app.main import app
 from app.schemas import Catalog
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "catalog.json"
+# A declared discovery gap, never satisfied by appointment-booking evidence.
+UNCOVERED_CAPABILITIES = {'field_dispatch'}
 
 
 def test_real_catalog_loads_and_covers_every_problem():
@@ -19,6 +21,9 @@ def test_real_catalog_loads_and_covers_every_problem():
     assert all(set(t.trades) <= trade_ids for t in catalog.tools)
     assert all(set(c.trades) <= trade_ids for c in catalog.problem_cards)
     for card in catalog.problem_cards:
+        if card.capability in UNCOVERED_CAPABILITIES:
+            assert not any(t.capability(card.capability) for t in catalog.tools)
+            continue
         assert any(t.capability(card.capability) for t in catalog.tools), card.id
 
 
@@ -31,6 +36,8 @@ def confirms(tool, card):
 def test_original_trades_have_an_eligible_tool_for_their_problems():
     catalog = db.load_catalog_file(CATALOG_PATH)
     for card in catalog.problem_cards:
+        if card.capability in UNCOVERED_CAPABILITIES:
+            continue
         for trade in ("restaurant", "coffee_shop", "hvac", "landscaping"):
             if card.common_for(trade):
                 assert any(confirms(t, card) and t.fit(trade) in ("made_for", "any_business") for t in catalog.tools), (card.id, trade)

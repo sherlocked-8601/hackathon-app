@@ -112,6 +112,9 @@ def plan_already_unknown(body):
 
 def filtered_context(catalog, profile, memory):
     excluded = set(memory.ruled_out)
+    from . import request_semantics
+    if request_semantics.enabled():
+        excluded.update(request_semantics.excluded_tool_ids(memory.requirements))
     clean_catalog = catalog.model_copy(update={
         'tools': [tool for tool in catalog.tools if tool.id not in excluded]
     })
@@ -160,6 +163,17 @@ def selected_task_ids(catalog, body, arguments):
     """Bind semantic choices to owner evidence, distinguishing separate needs from ambiguity."""
     selected = str(arguments.get('problem_id', ''))
     catalog.problem(selected)
+    from . import request_semantics
+    if request_semantics.enabled() and body._semantic_interpreted:
+        excerpt = arguments.get('task_text')
+        allowed = set(request_semantics.wanted_task_ids(body.memory.requirements)) | set(body.memory.active_task_ids)
+        if (selected not in allowed or selected in request_semantics.excluded_task_ids(body.memory.requirements)
+                or not isinstance(excerpt, str) or not excerpt.strip()
+                or excerpt.casefold() not in body.message.casefold()):
+            raise ActionContextError('Semantic route must match accepted owner requirements and current evidence')
+        return [selected]
+    if selected in body.memory.excluded_task_ids:
+        raise ActionContextError('Task was excluded by the owner')
     if selected in task_ids(catalog, body):
         return [selected]
     excerpt = arguments.get('task_text')

@@ -3,6 +3,7 @@ import asyncio
 import hmac
 import ipaddress
 import os
+import logging
 from urllib.parse import urlsplit
 import httpx
 from fastapi import FastAPI,Header,HTTPException
@@ -10,6 +11,7 @@ from pydantic import BaseModel,Field
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
 busy=False
+log=logging.getLogger(__name__)
 
 
 def valid_url(url):
@@ -43,6 +45,7 @@ async def render(body:RenderRequest,authorization:str|None=Header(default=None))
     if not valid:raise HTTPException(422,'Only public HTTPS pages can be rendered')
     if busy:raise HTTPException(429,'Renderer is busy',headers={'Retry-After':'30'})
     busy=True;browser=None;lease=None;engine=None
+    stage='proxy_lease'
     proxy=os.environ.get('RENDER_PROXY_URL','http://render-proxy:3128')
     headers={'Authorization':'Bearer '+os.environ.get('RENDER_PROXY_KEY','')}
     try:
@@ -50,6 +53,7 @@ async def render(body:RenderRequest,authorization:str|None=Header(default=None))
             r=await client.post(proxy+'/lease',headers=headers);r.raise_for_status();lease=r.json()
         from playwright.async_api import async_playwright
         async with asyncio.timeout(20):
+            stage='browser_start'
             engine=await async_playwright().start()
             browser=await engine.chromium.launch(headless=True,chromium_sandbox=True,
                 proxy={'server':proxy,'username':lease['lease'],'password':lease['password']},
@@ -70,7 +74,12 @@ async def render(body:RenderRequest,authorization:str|None=Header(default=None))
                     await request_route.continue_()
             await context.route('**/*',route)
             page=await context.new_page()
-            await page.goto(body.url,wait_until='domcontentloaded',timeout=14000)
+            stage='navigation'
+            response=await page.goto(body.url,wait_until='domcontentloaded',timeout=14000)
+            if response is not None and response.status >= 400:
+                log.warning('render_failed stage=navigation upstream_status=%d',response.status)
+                raise HTTPException(502,{'code':'vendor_http_error','upstream_status':response.status})
+            stage='page_extraction'
             await page.wait_for_timeout(1200)
             # One explicit monthly billing control, never a signup/purchase action.
             import re
@@ -96,8 +105,11 @@ async def render(body:RenderRequest,authorization:str|None=Header(default=None))
             if not valid_url(page.url):raise ValueError('invalid_final_url')
             return {'version':1,'render_policy':2,'url':page.url,'html':html,'requests':requests,'allowed_requests':allowed_requests,'mode':'rendered'}
     except HTTPException:raise
-    except Exception:
-        raise HTTPException(503,'Rendered evidence is unavailable; retain pending verification') from None
+    except Exception as exc:
+        # Exception messages may contain signed URLs or proxy credentials.
+        # Keep only the bounded stage and exception class in diagnostics.
+        log.warning('render_failed stage=%s error_type=%s',stage,type(exc).__name__)
+        raise HTTPException(503,{'code':'render_unavailable','stage':stage,'error_type':type(exc).__name__}) from None
     finally:
         try:
             if browser:await asyncio.wait_for(browser.close(),3)

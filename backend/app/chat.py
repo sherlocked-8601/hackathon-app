@@ -225,6 +225,7 @@ class ChatMemory(BaseModel):
     comparison_criterion: Literal['price', 'plan', 'cost', 'fit'] | None = None
     owned: list[str] = Field(default_factory=list, max_length=20)
     ruled_out: list[str] = Field(default_factory=list, max_length=20)
+    excluded_task_ids: list[str] = Field(default_factory=list, max_length=50)
     budget_monthly_usd: float | None = Field(default=None, ge=0)
     background_done: bool = False
     active_task_ids: list[str] = Field(default_factory=list, max_length=5)
@@ -235,6 +236,7 @@ class ChatMemory(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    _semantic_interpreted: bool = PrivateAttr(default=False)
     _principal: auth.Principal = PrivateAttr(default_factory=auth.Principal)
     _check_session: Any = PrivateAttr(default=None)
     _conn: Any = PrivateAttr(default=None)
@@ -520,6 +522,7 @@ def _clean_memory(catalog: Catalog, memory: ChatMemory) -> ChatMemory:
         comparison_criterion=memory.comparison_criterion,
         owned=[tool_id for tool_id in dict.fromkeys(memory.owned) if tool_id in known],
         ruled_out=[tool_id for tool_id in dict.fromkeys(memory.ruled_out) if tool_id in known],
+        excluded_task_ids=[pid for pid in dict.fromkeys(memory.excluded_task_ids) if pid in tasks],
         budget_monthly_usd=memory.budget_monthly_usd,
         background_done=memory.background_done,
         active_task_ids=[pid for pid in dict.fromkeys(memory.active_task_ids) if pid in tasks],
@@ -537,11 +540,17 @@ def _effective_profile(catalog: Catalog, profile: BusinessProfile, memory: ChatM
         OwnedSoftware(tool_id=entry.tool_id, plan=entry.plan or plans.get(entry.tool_id))
         for entry in profile.owned if entry.tool_id in known
     ]
-    owned += [OwnedSoftware(tool_id=tool_id, plan=plans.get(tool_id)) for tool_id in memory.owned if all(e.tool_id != tool_id for e in owned)]
+    owned += [OwnedSoftware(tool_id=tool_id, plan=plans.get(tool_id)) for tool_id in memory.owned if tool_id in known and all(e.tool_id != tool_id for e in owned)]
+    budget = memory.budget_monthly_usd if memory.budget_monthly_usd is not None else profile.budget_monthly_usd
+    if request_semantics.enabled():
+        requirement = request_semantics.owner_budget(memory.requirements)
+        if requirement is not None:
+            # Never silently treat an annual/per-seat/non-USD limit as monthly USD.
+            budget = requirement.amount if (requirement.currency, requirement.period, requirement.basis) == ('USD', 'month', 'total') else None
     return BusinessProfile(
         trade=None if memory.business_forgotten else memory.trade or memory.business_description or profile.trade,
         owned=owned,
-        budget_monthly_usd=memory.budget_monthly_usd if memory.budget_monthly_usd is not None else profile.budget_monthly_usd,
+        budget_monthly_usd=budget,
     )
 
 
@@ -639,6 +648,8 @@ def _run_action(
     """
     try:
         if name == "recommend_tools":
+            if str(arguments.get('problem_id')) in excluded:
+                return ActionResult(data={'error': 'This task was excluded by the owner.'})
             source_catalog = catalog
             catalog = recommendation_catalog(catalog, arguments)
             current = _effective_profile(catalog, profile, memory)
@@ -750,6 +761,9 @@ def _run_action(
 
 
 def run_action(catalog, name, arguments, profile, memory, excluded=frozenset()):
+    excluded = set(excluded) | (request_semantics.excluded_task_ids(memory.requirements)
+                               if request_semantics.enabled() else set(memory.excluded_task_ids))
+    catalog, profile = filtered_context(catalog, profile, memory)
     if chat_guard.reason(arguments):
         chat_guard.audit("tool_injection", "tool")
         return ActionResult(data={"error": "These action arguments cannot be used safely."})
@@ -922,6 +936,8 @@ def _owner_trade(catalog, profile, memory):
 
 def _outage_note(reason: str, matched: bool) -> str:
     """Says plainly that the AI did not answer, so a task card is never mistaken for an answer."""
+    if reason == 'invalid_response':
+        return "I couldn't validate my reply, so I haven't made a recommendation. You can try again or choose a task below if it matches your need."
     cause = ("Arkadio's AI has reached its usage budget for now" if reason in BUDGET_REASONS
              else "Arkadio's AI is unavailable for a moment")
     offer = ('These tasks are the closest match and still work without it.' if matched
@@ -955,7 +971,10 @@ async def _ask_what_they_need(gate, catalog, profile, memory, body, reason: str 
         yield event
     if not ready or result.data.get('error'):
         if ready:
-            yield _unavailable()
+            memory.pending_question, memory.pending_task_ids = None, []
+            yield _memory_event(memory)
+            for event in reply_events("I couldn't find a suitable task choice within your requirements. Please tell me the specific job you want help with, or try your question again.", 'fallback'):
+                yield event
         yield {"type": "done"}
         return
     memory.pending_question = arguments['question_id']
@@ -1258,7 +1277,10 @@ UNSUPPORTED_REPLY = "I don't have software listed for that yet, so I won't guess
 
 def _turned_down(catalog, body) -> frozenset[str]:
     from .tasks import rejected_task_ids
-    return frozenset(rejected_task_ids(catalog, body.message))
+    if request_semantics.enabled():
+        stored = frozenset(request_semantics.excluded_task_ids(body.memory.requirements))
+        return stored if body._semantic_interpreted else stored | frozenset(rejected_task_ids(catalog, body.message))
+    return frozenset(body.memory.excluded_task_ids) | frozenset(rejected_task_ids(catalog, body.message))
 
 
 def _task_card(catalog, profile, memory, ids, texts, excluded=()):
@@ -1283,7 +1305,6 @@ def _task_card(catalog, profile, memory, ids, texts, excluded=()):
 
 def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     from . import conversation_plan as planner
-    from .tasks import rejected_task_ids
     previous_user = next((item.text for item in reversed(body.history) if item.role == 'user'), '')
     issue_words = lambda value: {word for word in re.findall(r'[a-z]{5,}', value.casefold())
                                  if word not in {'about', 'business', 'could', 'customers', 'help', 'please', 'would'}}
@@ -1298,7 +1319,7 @@ def _clarify_turn(catalog, profile, memory, body, step, account_catalog):
     # Falling back to a template question here would be the same loop reworded.
     looping = bool(step.reply) and any(planner.repeats(step.reply, old) for old in recent)
     choices = list(step.problem_ids)
-    rejected = rejected_task_ids(catalog, body.message)
+    rejected = _turned_down(catalog, body)
     choices = [pid for pid in choices if pid not in rejected]
     memory.pending_question, memory.pending_task_ids = None, []
     if step.kind == 'unsupported':
@@ -1421,9 +1442,12 @@ async def plan_response(gate, catalog, profile, memory, body, plan):
             proposal = {'routes': [{'problem_id': pid, 'task_text': step.owner_text} for pid in step.problem_ids]}
             resolved = hermes_routing.apply(proposal, catalog, step_profile, memory, body)
             if resolved:
-                if step.context_mode == 'owner':
+                new_deliverable = any(f.kind == 'deliverable' and f.turn == memory.requirements.turn
+                                      for f in memory.requirements.facts)
+                if step.context_mode == 'owner' and (not body._semantic_interpreted or new_deliverable or not memory.business_goal):
                     memory.business_goal = planner.goal_from_text(step.owner_text) or step.owner_text[:300]
                 package, resolved_profile, tasks = resolved
+                memory.requirements = request_semantics.bind_active_task(memory.requirements, tasks)
                 memory.active_task_ids = tasks
                 memory.pending_question = None
                 yield _memory_event(memory)
@@ -1542,6 +1566,20 @@ async def _run_turn(catalog: Catalog, body: ChatRequest) -> AsyncIterator[dict[s
     if learned_trade:
         memory.trade = learned_trade
     body.memory = memory
+    if not request_semantics.enabled():
+        # Persist the legacy interpreter's explicit refusals across fallback turns.
+        # A later positive request can withdraw a refusal. Semantic mode owns its
+        # own reducer and must not have its meaning overwritten by keyword rules.
+        from .tasks import rejected_task_ids, resolve_task
+        excluded = set(memory.excluded_task_ids)
+        for message in [*(item.text for item in body.history if item.role == 'user'), body.message]:
+            if conversation_plan.contextual_language(message):
+                continue
+            positive = resolve_task(catalog, message)
+            if positive.status == 'matched':
+                excluded.discard(positive.problem_id)
+            excluded.update(rejected_task_ids(catalog, message))
+        memory.excluded_task_ids = sorted(excluded)[:50]
     if description or learned_trade or healed_business:
         yield _memory_event(memory)
     if not memory.pending_task_ids:
@@ -2128,9 +2166,9 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
 
         loop = asyncio.get_running_loop()
         reader = loop.create_task(read())
-        # Unresolved intent is a short routing attempt, not a minute-long tool
-        # research job. If it cannot route promptly, ask the owner directly.
-        timeout = config.timeout if operations else min(config.timeout, 12.0)
+        # Allow the provider's bounded response window plus gateway overhead.
+        # One request only: a timeout never triggers a second paid generation.
+        timeout = config.timeout if operations else min(config.timeout, _float_env('HERMES_ROUTING_TIMEOUT_SECONDS', 30.0))
         deadline = loop.time() + timeout
         outcome: str | None = None
         revoked: Exception | None = None
@@ -2233,11 +2271,13 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
                 except ValueError as exc:
                     logger.warning("semantics_invalid %s", type(exc).__name__)
                 else:
+                    body._semantic_interpreted = not (outcome.rejected or outcome.conflicts or outcome.ambiguities)
                     logger.info("semantics applied=%d withdrawn=%d rejected=%s conflicts=%d",
                                 len(outcome.applied), len(outcome.withdrawn),
                                 sorted({reason for _, reason in outcome.rejected}), len(outcome.conflicts))
                     if state != memory.requirements:
                         memory.requirements = state
+                        profile = _effective_profile(catalog, body.profile, memory)
                         yield _memory_event(memory)
             if (isinstance(routed, dict) and routed.get('business_text') is not None and not operations
                     and not conversation_plan.contextual_language(body.message)):
@@ -2295,6 +2335,7 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
                     if changed:
                         memory.trade = catalog.resolve_trade(next_profile.trade) if next_profile.trade else None
                         memory.active_task_ids = tasks
+                        memory.requirements = request_semantics.bind_active_task(memory.requirements, tasks)
                         memory.pending_question = None
                         memory.pending_task_ids = []
                         yield _memory_event(memory)
@@ -2331,6 +2372,8 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
             memory.pending_question = 'task'
             memory.pending_task_ids = asked.data.get('shown_task_ids', choices)
             yield _memory_event(memory)
+            for event in reply_events("I couldn't reliably interpret that reply. These are related tasks; choose one only if it matches what you need.", 'fallback'):
+                yield event
             for event in asked.events:
                 yield event
             yield {"type": "done"}
@@ -2349,6 +2392,7 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
             selected = None
         conversational = isinstance(selected, dict) and selected.get('conversation_intent') is not None
         if conversational:
+            selected.pop('semantics', None)
             for key in ('routes', 'trade', 'trade_text', 'business_text', 'action', 'plan'):
                 if selected.get(key) is None:
                     selected.pop(key, None)
@@ -2363,7 +2407,7 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
             else:
                 validated = validate_answer({}, package, guard)
         elif isinstance(selected, dict) and 'claim_ids' in selected:
-            cleaned = {key: value for key, value in selected.items() if key not in ('routes', 'trade', 'trade_text', 'business_text', 'action', 'plan')}
+            cleaned = {key: value for key, value in selected.items() if key not in ('routes', 'trade', 'trade_text', 'business_text', 'action', 'plan', 'semantics')}
             if cleaned.pop('conversation_intent', None) is not None or cleaned.pop('reply_id', None) is not None:
                 cleaned = {}
             validated = submit_selection(cleaned, package, guard)
@@ -2379,7 +2423,7 @@ async def run_hermes(gate: RunGate, package: EvidencePackage, body: ChatRequest,
                 yield event
             yield {'type': 'done'}
             return
-        async for event in conversation_response(gate, catalog, profile, memory, body, 'clarify'):
+        async for event in _ask_what_they_need(gate, catalog, profile, memory, body, reason='invalid_response'):
             yield event
         return
     if chat_guard.reason(validated.text):

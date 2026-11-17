@@ -8,6 +8,7 @@ import base64
 import hmac
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import time
@@ -15,6 +16,8 @@ from dataclasses import dataclass,field
 from urllib.parse import urlsplit
 
 from .discovery_worker.sources import resolve_public,system_resolver
+
+log=logging.getLogger(__name__)
 
 
 @dataclass
@@ -107,8 +110,9 @@ class Proxy:
             finally:
                 for task in tasks:task.cancel()
                 await asyncio.gather(*tasks,return_exceptions=True)
-        except Exception:
+        except Exception as exc:
             # Fixed outcome only, never echo URL/headers/exception details.
+            log.warning('render_proxy_failed error_type=%s',type(exc).__name__)
             try:await self.reply(writer,'403 Forbidden',{'error':'public_render_destination_unavailable'})
             except Exception:pass
         finally:

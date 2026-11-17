@@ -123,6 +123,10 @@ def finish(conn, job, reviewed=None, outcome='partial', reason='incomplete_evide
             elif reason=='contradictory_evidence':
                 conn.execute('DELETE FROM verification_overlay WHERE tool_id=? AND capability=?',(job['tool_id'],job['capability']))
         delay=refresh_s if outcome=='verified' else 3600 if outcome=='budget_paused' else min(86400,900*2**min(job['attempts']-1,6))
+        if outcome in ('partial', 'blocked'):
+            # Incomplete vendor evidence rarely changes within minutes. Avoid
+            # paying repeatedly for the same facts while new tools await review.
+            delay = max(refresh_s, delay)
         conn.execute('UPDATE verification_job SET state=?,due=?,lease=NULL,lease_until=NULL,code=?,updated=? WHERE tool_id=? AND capability=?',
                      (outcome,now+delay,reason,now,job['tool_id'],job['capability']))
         conn.commit(); return True
@@ -200,16 +204,18 @@ def status(conn):
             'scheduled_discovery':{'next_due':scheduled[0],'runs':scheduled[1],'last_outcome':scheduled[2]} if scheduled else None}
 
 
-def schedule_claim(conn, name, interval=86400, now=None, ttl=120):
+def schedule_claim(conn, name, interval=86400, now=None, ttl=120, resume_budget=False):
     now=time.time() if now is None else now
     conn.execute('BEGIN IMMEDIATE')
     try:
         conn.execute('INSERT OR IGNORE INTO verification_schedule(name,due,updated) VALUES(?,?,?)',(name,now,now))
-        due,until=conn.execute('SELECT due,lease_until FROM verification_schedule WHERE name=?',(name,)).fetchone()
-        if due>now or (until is not None and until>now):
+        due,until,code=conn.execute('SELECT due,lease_until,code FROM verification_schedule WHERE name=?',(name,)).fetchone()
+        # Resume only a previously budget-paused job, under the same atomic lease.
+        # Successful runs still obey their schedule, including across restarts.
+        if (due>now and not (resume_budget and code=='budget_paused')) or (until is not None and until>now):
             conn.commit(); return None
         lease=uuid.uuid4().hex
-        conn.execute('UPDATE verification_schedule SET lease=?,lease_until=?,updated=? WHERE name=?',(lease,now+ttl,now,name))
+        conn.execute("UPDATE verification_schedule SET lease=?,lease_until=?,updated=?,code='running' WHERE name=?",(lease,now+ttl,now,name))
         conn.commit(); return lease
     except BaseException:
         conn.rollback(); raise

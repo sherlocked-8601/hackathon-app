@@ -19,6 +19,12 @@ class Pages(dict):
         super().__init__();self.blocks=[];self.outcomes=[];self.billing={}
 
 
+class RenderFailure(RuntimeError):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
 def cache_connection():
     path=os.environ.get('APP_DB_PATH')
     if not path:return None
@@ -46,7 +52,10 @@ def render(url):
     if not endpoint or len(token)<24:raise RuntimeError('renderer_unconfigured')
     with httpx.Client(timeout=32,trust_env=False,follow_redirects=False) as client:
         with client.stream('POST',endpoint+'/render',headers={'Authorization':'Bearer '+token},json={'url':url}) as response:
-            response.raise_for_status();data=bytearray()
+            if response.is_error:
+                # Preserve a bounded diagnostic, never server bodies or credentials.
+                raise RenderFailure('render_http_' + str(response.status_code))
+            data=bytearray()
             for part in response.iter_bytes():
                 data+=part
                 if len(data)>900000:raise ValueError('render_payload_too_large')
@@ -98,7 +107,7 @@ def fetch(tool,cancel=None,capability=None,catalog=None):
                         if registrable_domain(urlsplit(rendered_doc['url']).hostname or '')==domain:
                             doc=rendered_doc
                     except Exception as exc:
-                        result.outcomes.append({'url':url,'code':'render_'+type(exc).__name__.lower()})
+                        result.outcomes.append({'url':url,'code':getattr(exc,'code','render_'+type(exc).__name__.lower())})
                     if doc:doc['render_attempted']=True
                 if doc and registrable_domain(urlsplit(doc['url']).hostname or '')==domain:
                     persist(conn,url,doc,doc['mode'],now)
@@ -112,7 +121,7 @@ def fetch(tool,cancel=None,capability=None,catalog=None):
                     if registrable_domain(urlsplit(rendered_doc['url']).hostname or '')==domain:
                         doc={**rendered_doc,'mode':'rendered'}
                 except Exception as exc:
-                    result.outcomes.append({'url':url,'code':'render_'+type(exc).__name__.lower()})
+                    result.outcomes.append({'url':url,'code':getattr(exc,'code','render_'+type(exc).__name__.lower())})
                 doc['render_attempted']=True
                 doc['render_attempted_policy']=2
                 persist(conn,url,doc,doc['mode'],now)

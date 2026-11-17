@@ -3,7 +3,7 @@ const MAX_SAVED_MESSAGES = 40
 const MAX_HISTORY = 12
 // The backend's ChatMemory limits. Memory goes back with every message, so a list over its
 // limit would get every message rejected; trimming here also heals a chat that is already stuck.
-const MEMORY_LIMITS = { owned: 20, ruled_out: 20, active_task_ids: 5, pending_task_ids: 3, last_tool_ids: 6, comparison_excluded_ids: 20, pending_favourite_ids: 6 }
+const MEMORY_LIMITS = { owned: 20, ruled_out: 20, excluded_task_ids: 50, active_task_ids: 5, pending_task_ids: 3, last_tool_ids: 6, comparison_excluded_ids: 20, pending_favourite_ids: 6 }
 const MAX_PLANS = 20
 const MAX_FACTS = 20
 const EMPTY_REQUIREMENTS = { facts: [], next_id: 1, turn: 0 }

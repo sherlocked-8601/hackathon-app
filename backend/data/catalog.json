@@ -108,10 +108,12 @@
       "id": "scheduling",
       "name": "Scheduling and jobs",
       "capabilities": [
-        "job_scheduling"
+        "job_scheduling",
+        "field_dispatch"
       ],
       "labels": {
-        "job_scheduling": "scheduling jobs and appointments"
+        "job_scheduling": "scheduling jobs and appointments",
+        "field_dispatch": "dispatching technicians and routing field jobs"
       }
     },
     {
@@ -266,7 +268,17 @@
       "phrases": [
         "schedule",
         "schedule jobs",
-        "job schedule",
+        "job schedule"
+      ]
+    },
+    {
+      "id": "field_dispatch",
+      "title": "Dispatching technicians is difficult",
+      "plain_words": "I need to assign technicians, route field jobs and manage work orders.",
+      "capability": "field_dispatch",
+      "trades": ["hvac", "plumbing", "electrical", "cleaning", "landscaping", "handyman"],
+      "requires": {"work_type": "field_jobs"},
+      "phrases": [
         "dispatch",
         "dispatch technicians",
         "assign technicians",
@@ -2337,7 +2349,8 @@
       "id": "work_type",
       "label": "What gets scheduled",
       "capabilities": [
-        "job_scheduling"
+        "job_scheduling",
+        "field_dispatch"
       ],
       "values": {
         "field_jobs": "jobs at the customer's place with crews or technicians",

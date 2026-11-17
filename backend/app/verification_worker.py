@@ -32,7 +32,7 @@ def scheduled_discovery(conn, finder, now=None):
     if os.environ.get('SCHEDULED_DISCOVERY_ENABLED', '').lower() not in ('1','true','yes'):
         return None
     interval = bounded_interval('DISCOVERY_INTERVAL_S', 86400)
-    lease = store.schedule_claim(conn, 'discovery', now=now, ttl=120)
+    lease = store.schedule_claim(conn, 'discovery', now=now, ttl=120, resume_budget=finder.available())
     if lease is None:
         return None
     code = 'budget_paused'
@@ -60,7 +60,7 @@ def scheduled_discovery(conn, finder, now=None):
         with conn:
             conn.execute("INSERT INTO verification_schedule(name,due,runs,code,updated) VALUES(?,?,1,?,?) ON CONFLICT(name) DO UPDATE SET runs=runs+1,code=excluded.code,updated=excluded.updated",
                          ('discovery:'+capability, stamp+interval, report.status, stamp))
-        code = 'completed'
+        code = 'search_unavailable' if report.status == 'failed' else 'completed'
         return code
     except discovery.DiscoveryFailed:
         code = 'search_unavailable'; return code
@@ -71,7 +71,10 @@ def scheduled_discovery(conn, finder, now=None):
     finally:
         if query and query['state']=='claimed':
             store.query_finish(conn,query,now=now)
-        store.schedule_finish(conn, 'discovery', lease, code, interval=interval, now=now)
+        # Unavailability is not a completed daily search. Retry the admission
+        # check later without spending; a recovered budget can resume immediately.
+        retry_interval = min(interval, 900) if code in ('budget_paused', 'search_unavailable', 'discovery_failed', 'query_busy') else interval
+        store.schedule_finish(conn, 'discovery', lease, code, interval=retry_interval, now=now)
 
 
 def review_one(conn, search, cancel=None, reviewer=None):
@@ -128,12 +131,13 @@ def main():
             with conn:
                 stamp=time.time()
                 conn.execute("INSERT INTO verification_schedule(name,due,code,updated) VALUES('worker',?,'alive',?) ON CONFLICT(name) DO UPDATE SET due=excluded.due,code=excluded.code,updated=excluded.updated",(stamp+240,stamp))
-            # Reviews take precedence. A discovery run never consumes a renderer slot.
+            # Claim due discovery first; reviews must not consume its last slot.
+            scheduled_discovery(conn, finder)
+            if stop.is_set():
+                break
             result = review_one(conn, search, stop)
             if result:
                 count += 1
-            if not stop.is_set():
-                scheduled_discovery(conn, finder)
             if args.once and (count >= args.max_jobs or result is None):
                 break
             stop.wait(2 if result else 15)

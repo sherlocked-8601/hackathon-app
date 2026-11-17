@@ -24,6 +24,24 @@ def test_renderer_auth_and_private_url_fail_before_browser(monkeypatch):
     assert client.post('/render',json={'url':'https://127.0.0.1'},headers={'Authorization':'Bearer '+'x'*32}).status_code==422
 
 
+def test_renderer_failure_reports_stage_without_secret_and_releases_busy(monkeypatch, caplog):
+    monkeypatch.setenv('RENDER_API_KEY', 'x'*32)
+    class FailedClient:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs):
+            raise RuntimeError('secret-token-do-not-log')
+    monkeypatch.setattr(render_service.httpx, 'AsyncClient', FailedClient)
+    client = TestClient(render_service.app)
+    response = client.post('/render', json={'url': 'https://example.com'}, headers={'Authorization':'Bearer '+'x'*32})
+    assert response.status_code == 503
+    assert response.json()['detail'] == {'code':'render_unavailable','stage':'proxy_lease','error_type':'RuntimeError'}
+    assert not render_service.busy
+    assert 'stage=proxy_lease' in caplog.text
+    assert 'secret-token' not in response.text + caplog.text
+
+
 def test_proxy_dns_rebinding_mixed_answers_are_rejected():
     with pytest.raises(FetchError):
         resolve_public('https://example.com',lambda _:['93.184.216.34','127.0.0.1'])

@@ -244,6 +244,18 @@ def fetch_pages(tool: Tool, cancel=None, capability=None, catalog=None):
     return pages
 
 
+def review_limits(search):
+    """Reserve one search admission inside the existing lifetime limits.
+
+    This is enforced atomically by Ledger.admit, including concurrent workers;
+    it never resets counters, releases uncertain charges or increases a cap.
+    """
+    import os
+    if os.environ.get('SCHEDULED_DISCOVERY_ENABLED', '').lower() not in ('1', 'true', 'yes'):
+        return search.max_requests, search.cap_usd
+    return max(0, search.max_requests - 1), max(0.0, search.cap_usd - 0.25)
+
+
 def review(tool: Tool, capability: str, catalog: Catalog, search, cancel=None) -> Tool:
     """Bounded public pages, one metered tool-less extraction, deterministic evidence rules."""
     import os
@@ -293,7 +305,8 @@ def review(tool: Tool, capability: str, catalog: Catalog, search, cancel=None) -
     schema=Extraction.model_json_schema()
     input_bound=len(json.dumps({'messages':messages,'schema':schema},ensure_ascii=False).encode('utf-8'))+4096
     reserved=math.ceil((input_bound/1_000_000+1400*5/1_000_000)*1.2*1_000_000)/1_000_000
-    number, reason = search.ledger.admit(reserved, search.max_requests, search.cap_usd)
+    max_requests, cap_usd = review_limits(search)
+    number, reason = search.ledger.admit(reserved, max_requests, cap_usd)
     if number is None:
         raise RuntimeError('verification_budget_unavailable')
     try:

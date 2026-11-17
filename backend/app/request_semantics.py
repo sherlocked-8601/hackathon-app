@@ -21,7 +21,7 @@ Scope = Literal['current_action', 'active_task', 'business', 'scenario']
 
 class Budget(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    amount: float = Field(gt=0, le=1_000_000)
+    amount: float = Field(ge=0, le=1_000_000)
     currency: str = Field(pattern=r'^[A-Z]{3}$')
     period: Literal['month', 'year', 'one_time']
     basis: Literal['total', 'per_seat']
@@ -156,8 +156,16 @@ def start_turn(state: RequestState, active_task_ids: list[str]) -> RequestState:
     active = set(active_task_ids)
     kept = [fact for fact in state.facts
             if fact.scope != 'current_action'
-            and not (fact.scope == 'active_task' and not active & set(fact.anchor_task_ids))]
+            and not (fact.scope == 'active_task' and fact.anchor_task_ids and not active & set(fact.anchor_task_ids))]
     return state.model_copy(update={'facts': kept, 'turn': state.turn + 1})
+
+
+def bind_active_task(state: RequestState, tasks: list[str]) -> RequestState:
+    """Bind requirements collected before the first task was resolved."""
+    return state.model_copy(update={'facts': [
+        fact.model_copy(update={'anchor_task_ids': list(tasks)[:5]})
+        if fact.scope == 'active_task' and not fact.anchor_task_ids else fact
+        for fact in state.facts]})
 
 
 def apply_delta(state: RequestState, delta: Interpretation, message: str, catalog,
@@ -236,11 +244,11 @@ def _owner_facts(state: RequestState, kind: str) -> list[Fact]:
 
 
 def excluded_task_ids(state: RequestState) -> set[str]:
-    return {fact.task_id for fact in _owner_facts(state, 'task_exclusion') if fact.task_id}
+    return {fact.task_id for fact in _owner_facts(state, 'task_exclusion') if fact.task_id and fact.strength == 'hard'}
 
 
 def excluded_tool_ids(state: RequestState) -> set[str]:
-    return {tool for fact in _owner_facts(state, 'product_exclusion') for tool in fact.tool_ids}
+    return {tool for fact in _owner_facts(state, 'product_exclusion') if fact.strength == 'hard' for tool in fact.tool_ids}
 
 
 def wanted_task_ids(state: RequestState) -> list[str]:
@@ -250,7 +258,7 @@ def wanted_task_ids(state: RequestState) -> list[str]:
 def owner_budget(state: RequestState) -> Budget | None:
     """The narrowest budget wins: one stated for this action beats one for the whole business."""
     order = {'current_action': 0, 'active_task': 1, 'business': 2}
-    budgets = sorted(_owner_facts(state, 'budget'), key=lambda fact: order[fact.scope])
+    budgets = sorted((fact for fact in _owner_facts(state, 'budget') if fact.strength == 'hard'), key=lambda fact: (order[fact.scope], -fact.turn))
     return budgets[0].budget if budgets else None
 
 
@@ -264,8 +272,13 @@ PROMPT = (
     'work, budget for a spending limit. A refusal and a request in one message are two separate facts. '
     'scope=current_action for this answer only, active_task while the current task lasts, business for '
     'the whole business, scenario for quoted, third-party or hypothetical words. Use only catalog task '
-    'and tool ids. Do not restate facts that are unchanged: unmentioned facts stay. Put needs the catalog '
-    'cannot express in unresolved, and unclear wording in ambiguities. semantics=null when public reads '
+    'and tool ids. Do not restate facts that are unchanged: unmentioned facts stay. '
+    'The plan and routes must obey the UPDATED requirements, including earlier turns. A short budget '
+    'or constraint follow-up continues the active task: recommend it when enough context exists; do not '
+    'restart business intake or ask the same clarification. Record a deliverable before routing a new task. '
+    'Appointment booking is not field-service dispatch; never substitute a broader capability for an '
+    'unrepresented requirement. Use unsupported when no catalog task expresses the requested capability. '
+    'Put needs the catalog cannot express in unresolved, and unclear wording in ambiguities. semantics=null when public reads '
     'are registered.')
 
 

@@ -311,6 +311,11 @@ def validate_plan(raw, body, catalog):
     plan = Plan.model_validate(raw)
     from .tasks import rejected_task_ids, resolve_task
     rejected = rejected_task_ids(catalog, body.message)
+    from . import request_semantics
+    if request_semantics.enabled() and getattr(body, '_semantic_interpreted', False):
+        rejected = request_semantics.excluded_task_ids(body.memory.requirements)
+    else:
+        rejected |= set(getattr(getattr(body, 'memory', None), 'excluded_task_ids', []))
     positive = resolve_task(catalog, body.message)
     known = {tool.id for tool in catalog.tools if tool.status != 'rejected'}
     problems = {card.id for card in catalog.problem_cards}
@@ -428,6 +433,7 @@ def help_text(topic, catalog):
 
 
 def forget_business(memory):
+    memory.excluded_task_ids = []
     memory.trade = memory.business_description = memory.business_goal = memory.scenario_business = None
     memory.business_forgotten = True
     from .request_semantics import RequestState

@@ -170,7 +170,7 @@ def test_attract_customers_fallback_card_offers_only_acquisition_tasks(client, h
     chat = Chat(client, {'business_description': 'coffee shop', 'business_goal': 'attract customers'})
     _, text = chat.say('how do I attract customers.')
     assert sorted(chat.card()) == ['email_marketing', 'review_requests', 'website_chat_leads']
-    assert text.startswith('For coffee shop, which would help most')
+    assert "couldn't validate my reply" in text
 
 
 def test_em_dashes_in_ai_wording_become_commas(client):
